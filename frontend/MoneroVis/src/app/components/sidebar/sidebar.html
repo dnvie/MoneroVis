@@ -1,0 +1,128 @@
+<div
+  class="sidebar"
+  [class.open]="isExpanded()"
+  [style.width.px]="width()"
+  (touchstart)="onTouchStart($event)"
+  (touchend)="onTouchEnd($event)"
+>
+  <div class="sidebarContainer">
+    <div class="header">
+      <div class="headerButtons">
+        @if (clipboardService.mode() === 'simple') {
+        <div class="closeContainer infoContainer">
+          <div class="expandArrow" (click)="modalService.open('output-merging')">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#e8eaed"
+            >
+              <path
+                d="M480-280q17 0 28.5-11.5T520-320v-160q0-17-11.5-28.5T480-520q-17 0-28.5 11.5T440-480v160q0 17 11.5 28.5T480-280Zm0-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"
+              />
+            </svg>
+          </div>
+        </div>
+        } @if (!isGraphExpanded() && clipboardService.mode() === 'simple' && ((transactionGraph &&
+        !transactionGraph.isEmpty()) || hasTraceData())) {
+        <div class="closeContainer">
+          <div class="expandArrow" (click)="toggleGraph()">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#e8eaed"
+              style="transform: rotate(90deg) scale(0.85)"
+            >
+              <path
+                d="M280-80q-50 0-85-35t-35-85q0-39 22.5-70t57.5-43v-334q-35-12-57.5-43T160-760q0-50 35-85t85-35q50 0 85 35t35 85q0 39-22.5 70T320-647v167q25-19 55.5-29.5T440-520h80q50 0 85-35t35-85v-7q-35-12-57.5-43T560-760q0-50 35-85t85-35q50 0 85 35t35 85q0 39-22.5 70T720-647v7q0 83-58.5 141.5T520-440h-80q-50 0-85 35t-35 85v7q35 12 57.5 43t22.5 70q0 50-35 85t-85 35Z"
+              />
+            </svg>
+          </div>
+        </div>
+        }
+        <div class="closeContainer">
+          <div class="expandArrow" (click)="toggle()">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#e8eaed"
+            >
+              <path
+                d="M660-368v-224q0-14-12-19t-22 5l-98 98q-12 12-12 28t12 28l98 98q10 10 22 5t12-19ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm200-80h360v-560H400v560Z"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!--<div class="searchContainer">
+      <div class="searchHeading">
+        View Decoymap <span class="lighter">(Given Output Index)</span>
+      </div>
+      <input
+        type="text"
+        id="searchBar"
+        #searchBar
+        placeholder="Enter Output Index"
+        (keydown.enter)="search(searchBar.value.trim())"
+      />
+      </div>-->
+    <div class="clipboardContainer">
+      <app-clipboard
+        (automatedTraceComplete)="handleAutomatedTraceResult($event)"
+        (clearAutomatedTrace)="onClearAutomatedTrace()"
+      ></app-clipboard>
+    </div>
+  </div>
+  <div class="resize-handle" (mousedown)="onResizeStart($event)"></div>
+</div>
+@if (showExternalExpandArrow()) {
+<div class="expandArrowContainer" [class.decoy-map-style]="isOnDecoyMap()">
+  <div class="expandArrow" (click)="toggle()">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      height="24px"
+      viewBox="0 -960 960 960"
+      width="24px"
+      fill="#e8eaed"
+    >
+      <path
+        d="M500-592v224q0 14 12 19t22-5l98-98q12-12 12-28t-12-28l-98-98q-10-10-22-5t-12 19ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm200-80h360v-560H400v560Z"
+      />
+    </svg>
+  </div>
+</div>
+}
+<div class="graphContainer" [class.open]="isGraphExpanded()">
+  <app-transaction-graph
+    #transactionGraph
+    [fillParent]="true"
+    [isSidebar]="true"
+    (navigateToDecoy)="onDecoyMapNavigation()"
+  ></app-transaction-graph>
+
+  @if (isGraphExpanded() && transactionGraph.isEmpty()) {
+  <div class="no-data-message">No data yet</div>
+  }
+
+  <div class="closeContainer graphCloseContainer">
+    <div class="expandArrow" (click)="toggleGraph()">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        height="24px"
+        viewBox="0 -960 960 960"
+        width="24px"
+        fill="#e8eaed"
+      >
+        <path
+          d="M480-424 363.33-307q-11.07 11-28.17 11T307-307q-11-11-11-28t11-28l117-117-117-115.67q-11-11.07-11-28.17T307-652q11-11 28-11t28 11l117 117 115.67-117q11.07-11 28.17-11T652-652q12 12 12 28.5T652-596L535-480l117 116.67q11 11.07 11 28.17T652-307q-12 12-28.5 12T596-307L480-424Z"
+        />
+      </svg>
+    </div>
+  </div>
+</div>

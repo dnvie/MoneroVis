@@ -1,0 +1,179 @@
+@if (decoyTransaction) {
+<div class="openButtonFrame">
+  <div
+    class="openButtonContainer"
+    (click)="open()"
+    (touchstart)="onOpenTouchStart($event)"
+    (touchend)="onOpenTouchEnd($event)"
+  >
+    <div class="openButton"></div>
+  </div>
+</div>
+}
+<div class="frame" [class.open]="isOpen()" [style.height.px]="height()">
+  <div
+    class="resize-handle"
+    (mousedown)="onResizeStart($event)"
+    (touchstart)="onResizeTouchStart($event)"
+    (touchmove)="onResizeTouchMove($event)"
+    (touchend)="onResizeTouchEnd($event)"
+  ></div>
+  <div class="hideButtonFrame">
+    <div class="hideButtonContainer" (click)="close()">
+      <div class="hideButton"></div>
+    </div>
+  </div>
+  @if (showLoader()) {
+  <div class="loaderContainer">
+    @if (errorTooManyTxs()) {
+    <div class="loadingTextContainer">
+      <div class="loadingText">Request Too Large</div>
+      <div class="loadingText extralight">
+        More than 100 transactions found. Please try a different query.
+      </div>
+      <a class="home-button" [routerLink]="['/']">Go to Homepage</a>
+    </div>
+    } @else if (error()) {
+    <div class="loadingTextContainer">
+      <div class="loadingText">Error Loading Map Data</div>
+      <div class="loadingText extralight">Please try again later</div>
+    </div>
+
+    } @else {
+    <app-loader></app-loader>
+    <div class="loadingTextContainer">
+      <div class="loadingText">
+        Loading Map Data @if (isLoading()) {
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          style="display: inline-block; height: 1.1em; vertical-align: -0.15em"
+          viewBox="0 -960 960 960"
+          fill="currentColor"
+          class="lighter"
+        >
+          <path
+            d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"
+          />
+        </svg>
+        } @else {
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          style="display: inline-block; height: 1.1em; vertical-align: -0.15em"
+          viewBox="0 -960 960 960"
+          fill="currentColor"
+          class="green"
+        >
+          <path d="M400-304 240-464l56-56 104 104 264-264 56 56-320 320Z" />
+        </svg>
+        }
+      </div>
+      @if (isLoading()) {
+      <div class="loadingText extralight">
+        Computing Layout
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          style="display: inline-block; height: 1.1em; vertical-align: -0.15em"
+          viewBox="0 -960 960 960"
+          fill="currentColor"
+          class="lighter"
+        >
+          <path
+            d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"
+          />
+        </svg>
+      </div>
+      } @else {
+      <div class="loadingText">
+        Computing Layout
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          style="display: inline-block; height: 1.1em; vertical-align: -0.15em"
+          viewBox="0 -960 960 960"
+          fill="currentColor"
+          class="lighter"
+        >
+          <path
+            d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"
+          />
+        </svg>
+      </div>
+      }
+    </div>
+    }
+  </div>
+  }
+  <div class="top-right-controls">
+    <div class="buttonContainer">
+      <div class="top-row">
+        <button class="decoyMapButton ui-button" (click)="closeAndClear()" title="Close Decoy Map">
+          Close
+        </button>
+      </div>
+      <button
+        class="ui-button decoyMapButton"
+        (click)="toggleInputDisplay()"
+        [disabled]="isLoading()"
+        [title]="showAllInputs() ? 'Only show connected inputs' : 'Show all inputs'"
+      >
+        {{ showAllInputs() ? 'Reduce Inputs' : 'All Inputs' }}
+      </button>
+    </div>
+    <div id="mode-toggle-container" class="custom-dropdown" #dropdownContainer>
+      <div id="selected-mode" class="decoyMapButton" #selectedModeDisplay>Mode: Click</div>
+      <div id="mode-options">
+        <div class="mode-option" data-mode="click">Click</div>
+        <div class="mode-option" data-mode="hover">Hover</div>
+        <div class="mode-option" data-mode="multi-click">Multi-Click</div>
+      </div>
+    </div>
+    <div id="legend-container" #legendContainer>
+      <strong>Nodes</strong>
+      <div class="legend-item" data-legend-key="mainTx">
+        Right click transaction node<br />
+        to view its transaction page
+      </div>
+      <div class="legend-item" data-legend-key="mainTx">
+        <span class="legend-symbol shape-rect color-yellow"></span>
+        Main Tx
+      </div>
+      <div class="legend-item" data-legend-key="suspiciousTx">
+        <span class="legend-symbol shape-rect color-pink"></span>
+        Suspicious Tx
+      </div>
+      <div class="legend-item" data-legend-key="mainOutput">
+        <span class="legend-symbol shape-triangle color-yellow"></span>
+        Main Tx Output
+      </div>
+      <div class="legend-item" data-legend-key="realSpend">
+        <span class="legend-symbol shape-triangle color-red"></span> Selected Output
+      </div>
+      <div class="legend-item" data-legend-key="mainInput">
+        <span class="legend-symbol shape-circle color-yellow-dark"></span>
+        Main Tx Inputs
+      </div>
+      <div class="legend-item" data-legend-key="mainRing">
+        <span class="legend-symbol shape-ring color-yellow-darker"></span>
+        Main Tx Ring Member
+      </div>
+      <div class="legend-item" data-legend-key="childTx">
+        <span class="legend-symbol shape-rect color-grey-tx"></span>
+        Transaction
+      </div>
+      <div class="legend-item" data-legend-key="childInput">
+        <span class="legend-symbol shape-circle color-grey-input"></span>
+        Inputs
+      </div>
+      <div class="legend-item" data-legend-key="ring1">
+        <span class="legend-symbol shape-ring color-grey-ring"></span>
+        Ring Member (1 Edge)
+      </div>
+      <strong data-legend-key="edgesHeader">Edges</strong>
+      <div class="legend-item" data-legend-key="realSpendLink">
+        <span class="legend-symbol shape-line color-red-line"></span>
+        Selected Output Edge
+      </div>
+    </div>
+  </div>
+
+  <div id="graph" #graph></div>
+</div>

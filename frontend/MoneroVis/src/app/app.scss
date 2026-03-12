@@ -1,0 +1,7 @@
+.container {
+  padding-top: 20px;
+  //background-color: #f4f2ee;
+  background-color: var(--background);
+  overflow-x: hidden;
+  min-height: calc(100vh + 60px);
+}

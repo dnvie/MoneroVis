@@ -1,0 +1,237 @@
+.graph-wrapper {
+  position: relative;
+  width: 100%;
+
+  .graph-loader {
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    background: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 12px;
+    color: #555;
+    border: 1px solid #eee;
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #59a14f;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .transaction-container {
+    width: 100%;
+    height: 600px;
+    max-height: calc(100vh - 400px) !important;
+    min-height: 300px;
+    border-radius: 8px;
+    border: var(--txGraphBorder);
+    overflow: hidden;
+    background-color: var(--background);
+  }
+
+  &.fullscreen-mode,
+  &.fill-parent {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99998;
+    background-color: var(--background);
+    padding: 0;
+    margin: 0;
+
+    .transaction-container {
+      width: 100%;
+      height: 100% !important;
+      max-height: 100vh !important;
+      border: none;
+      border-radius: 0;
+    }
+  }
+
+  %graph-btn {
+    z-index: 10;
+    background-color: var(--searchBackground);
+    box-shadow: 0 0px 20px rgba(0, 0, 0, 0.02);
+    border-radius: 7px;
+    width: 32px;
+    height: 32px;
+    border: var(--searchBorder);
+    transition: all 0.3s ease-in-out;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      opacity 0.2s,
+      background 0.2s;
+    color: #333;
+
+    &:hover {
+      opacity: 1;
+      filter: brightness(0.9);
+    }
+
+    svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--expandArrowSvgFill);
+    }
+  }
+
+  .fs-btn {
+    @extend %graph-btn;
+  }
+
+  .info-btn {
+    @extend %graph-btn;
+  }
+
+  .expand-all-btn {
+    @extend %graph-btn;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .tooltip {
+    position: fixed;
+    opacity: 0;
+    background: var(--searchBackground);
+    border: var(--txGraphBorder);
+    padding: 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    font-size: 12px;
+    z-index: 100000;
+    max-width: 300px;
+    color: var(--text);
+  }
+
+  .node {
+    cursor: pointer;
+    transition: opacity 0.4s;
+  }
+
+  .node rect {
+    fill: #333;
+    stroke: #555;
+    stroke-width: 1px;
+    rx: 5;
+  }
+
+  .node text {
+    font-family: 'Google Sans Code';
+    letter-spacing: -0.15px;
+    font-size: 10px;
+    fill: #ccc;
+    pointer-events: none;
+  }
+
+  .node-tx rect {
+    fill: var(--graphNodeFill);
+    stroke: none;
+  }
+
+  .node-tx text {
+    fill: var(--graphText);
+    font-weight: 500;
+  }
+
+  .node.faded {
+    opacity: 0.1;
+    pointer-events: none;
+    filter: blur(1px);
+  }
+
+  .link.faded {
+    opacity: 0.05;
+  }
+
+  .link {
+    fill: none;
+    stroke: #555;
+    stroke-width: 1px;
+    opacity: 0.6;
+    transition: opacity 0.4s;
+  }
+
+  .link.bridge {
+    stroke: #59a14f;
+    stroke-width: 2px;
+    fill: none;
+    opacity: 0.9;
+    animation: dash 60s linear infinite;
+    stroke-dasharray: 5, 5;
+  }
+
+  .link.connected-path {
+    stroke: #3c8f13 !important;
+    stroke-width: 1.5px !important;
+    opacity: 1 !important;
+    stroke-dasharray: none !important;
+    animation: none !important;
+  }
+
+  @keyframes dash {
+    to {
+      stroke-dashoffset: -1000;
+    }
+  }
+
+  .view-btn {
+    @extend .info-btn;
+  }
+
+  .rightButtons {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    display: flex;
+    flex-direction: column-reverse;
+    row-gap: 10px;
+  }
+
+  .bottomButtons {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    display: flex;
+    flex-direction: row;
+    column-gap: 10px;
+  }
+}

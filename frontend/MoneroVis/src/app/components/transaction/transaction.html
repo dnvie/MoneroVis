@@ -1,0 +1,462 @@
+<div id="frame">
+  <div id="container">
+    <div class="pathContainer">
+      <div class="path">
+        <nav class="breadcrumb">
+          <span class="lighter"><a class="lighter" (click)="navigateToHome()">Home</a> › </span
+          ><a class="lighter" (click)="navigateToBlocks()">Blocks</a
+          ><span class="lighter"> › </span> @if (transactionData?.block_height == 0) {
+          <span class="lighter">Mempool</span> } @else {
+          <a class="lighter" (click)="navigateToBlock(transactionData?.block_height!)">
+            Block {{ transactionData?.block_height }}
+          </a>
+          }
+          <span class="lighter"> › </span>
+          <span class="pathActive" [class.pathDisabled]="isLoading()"
+            >{{ txPathText() }} @if (!isLoading()) { {{ transactionData!.tx_hash!.substring(0,4)
+            }}…{{ transactionData!.tx_hash!.slice(-4) }} }</span
+          >
+        </nav>
+      </div>
+    </div>
+
+    <div class="headingContainer">
+      @if (isLoading()) {
+      <div class="heading skeletonHeadingContainer">
+        Transaction:
+        <div class="skeletonHeading skeleton"></div>
+      </div>
+      <div class="hash">
+        <div class="skeletonHash skeleton"></div>
+      </div>
+      } @else {
+      <div class="heading">
+        <div>Transaction:&nbsp;</div>
+        <div>
+          {{ transactionData!.tx_hash!.substring(0,4) }}…{{ transactionData!.tx_hash!.slice(-4) }}
+        </div>
+      </div>
+      <div class="hash lighter">
+        <span class="mono2">{{ transactionData!.tx_hash! }}</span>
+      </div>
+      }
+    </div>
+
+    @if (isLoading() && !hasLoaded()) {
+    <div class="loaderContainer skeleton">
+      <app-loader></app-loader>
+    </div>
+    }
+
+    <div [class.hidden]="!hasLoaded()">
+      <app-transaction-graph
+        [initialTransaction]="transactionData"
+        [highlightedAddress]="highlightedAddress()"
+      ></app-transaction-graph>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+  <div class="txInfoContainer">
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Block:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo1"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Confirmations:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo2"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Timestamp:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo3"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Date:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo4"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Type/Version:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo4"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Transaction Fee/per kB:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo5"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Transaction Size:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo6"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Hash:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo7"></div>
+    </div>
+    <div class="txInfo txInfoLabel skeletonTxInfo">
+      Extra:
+      <div class="skeleton skeletonTxInfoItem skeletonTxInfo8"></div>
+    </div>
+  </div>
+  } @else {
+  <div class="txInfoContainer">
+    @if (transactionData) { @if (transactionData.inputs[0].key_image == "") {
+    <div class="txInfo">
+      <div class="coinbase">Coinbase Transaction</div>
+    </div>
+    }
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Block:</span>
+        @if (transactionData.block_height == 0 && transactionData.tx_hash !=
+        'c88ce9783b4f11190d7b9c17a69c1c52200f9faaee8e98dd07e6811175177139') { Mempool } @else {
+        {{transactionData.block_height}} }
+      </div>
+    </div>
+    <div class="txInfo">
+      <div class="confirmations">
+        <span class="confirmationNoColor"
+          ><span class="txInfoLabel">Confirmations:</span>
+          {{transactionData.confirmations}}&nbsp;</span
+        >
+        @if (transactionData.confirmations >= 10) {
+        <span class="confirmedButton"
+          >Confirmed
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            style="display: inline-block; height: 1.1em; vertical-align: -0.15em"
+            viewBox="0 -960 960 960"
+            fill="currentColor"
+          >
+            <path d="M400-304 240-464l56-56 104 104 264-264 56 56-320 320Z" /></svg
+        ></span>
+        } @else if (transactionData.confirmations == 0) {
+        <span class="confirming"><span class="confirmingButton">In Mempool</span></span>
+        } @else {
+        <span class="confirming"><span class="confirmingButton">Confirming…</span></span> }
+      </div>
+    </div>
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Timestamp:</span>
+        @if (transactionData.block_height == 0 && transactionData.tx_hash !=
+        'c88ce9783b4f11190d7b9c17a69c1c52200f9faaee8e98dd07e6811175177139') { Not processed yet }
+        @else { {{transactionData.block_timestamp}} }
+      </div>
+    </div>
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Date:</span>
+        @if (transactionData.block_height == 0 && transactionData.tx_hash !=
+        'c88ce9783b4f11190d7b9c17a69c1c52200f9faaee8e98dd07e6811175177139') { Not processed yet }
+        @else { {{transactionData.block_timestamp * 1000 | date:'MMMM d, y'}}
+        <span class="txInfoLabel">({{transactionData.relative_time}})</span>}
+      </div>
+    </div>
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Type/Version:</span>
+        {{ transactionData.type > 1 ? 'RingCT' : 'pre-RingCT' }}/{{ transactionData.version }}
+      </div>
+    </div>
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Transaction Fee/per kB:</span>
+        {{transactionData.txnFee/1000000000000}}ɱ/{{(transactionData.txnFee/1000000000000/transactionData.size).toFixed(8)}}ɱ
+      </div>
+    </div>
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Transaction Size:</span>
+        {{transactionData.size.toFixed(4)}} kB
+      </div>
+    </div>
+    <div class="txInfo">
+      <div>
+        <span class="txInfoLabel">Hash: </span>
+        <span class="mono">{{transactionData.tx_hash}}</span>
+      </div>
+    </div>
+    <div class="txInfo extra">
+      <div>
+        <span class="txInfoLabel">Extra: </span
+        ><ng-container *ngFor="let segment of parsedExtra"
+          ><ng-container *ngIf="segment.isRaw">{{ segment.value }}</ng-container
+          ><span *ngIf="!segment.isRaw" [ngClass]="segment.wrapperClass"
+            ><span class="extraSectionLabel" [ngClass]="segment.labelColorClass"
+              >{{ segment.label }}</span
+            ><span [ngClass]="segment.valueClass">{{ segment.value }}</span></span
+          ></ng-container
+        >
+      </div>
+    </div>
+    }
+  </div>
+  }
+
+  <div id="ioContainer">
+    @if (isLoading()) { } @else { @if (transactionData) {
+    <div class="ioHeader">Outputs: {{ transactionData.outputs.length }}</div>
+    <div class="outputs outputsWidth">
+      <div class="output header">
+        <div>Stealth Address:</div>
+        <div>Output Index:</div>
+        <div>View Tag:</div>
+        <div>Amount:</div>
+      </div>
+      @for (output of transactionData.outputs | slice: 0 : outputsLimit(); track output; let count =
+      $index) {
+      <div
+        class="output"
+        [class.highlighted-output]="output.stealth_address === highlightedAddress()"
+        (click)="navigateToDecoyMap(transactionData.tx_hash, output.stealth_address, output.output_index, transactionData.version)"
+      >
+        <div class="mobileFlexOutput">
+          <span class="lighterTextMobile">Stealth Address:&nbsp;</span
+          ><span class="mono">{{ output.stealth_address }}</span>
+        </div>
+        <div class="mobileFlexOutput">
+          @if (transactionData.block_height == 0 && transactionData.tx_hash !=
+          'c88ce9783b4f11190d7b9c17a69c1c52200f9faaee8e98dd07e6811175177139') {
+          <span class="lighterTextMobile">Output Index:&nbsp;</span> N/A } @else {
+          <span class="lighterTextMobile">Output Index:&nbsp;</span>{{ output.output_index }}}
+        </div>
+        <div class="mobileFlexOutput">
+          <span class="lighterTextMobile">View Tag:&nbsp;</span>
+          <span>
+            <span style="color: var(--textLighter)">&lt;</span>
+            @if (output.view_tag) { {{ output.view_tag }} } @else { ? }
+            <span style="color: var(--textLighter)">&gt;</span>
+          </span>
+        </div>
+        <div class="mobileFlexOutput">
+          <span class="lighterTextMobile">Amount:&nbsp;</span
+          ><span>
+            @if (output.amount) { {{ (output.amount/1000000000000).toFixed(11) }}<span
+              class="lighterText"
+            >
+              ɱ</span
+            >
+            } @else { ? }
+          </span>
+        </div>
+      </div>
+      } @if (transactionData.outputs.length > outputsLimit()) {
+      <div class="desktop">
+        <div class="output" style="margin-top: 5px" (click)="increaseOutputsLimit()">
+          <div class="mobileFlexOutput">
+            <span class="showMoreText"
+              >Show remaining {{ transactionData.outputs.length - outputsLimit() }}</span
+            >
+          </div>
+        </div>
+      </div>
+      <div class="mobile">
+        <div class="load-more-container">
+          <button class="viewAllButtonNew" (click)="increaseOutputsLimit()">
+            Show remaining {{ transactionData.outputs.length - outputsLimit() }}
+          </button>
+        </div>
+      </div>
+      }
+    </div>
+
+    @if (suspiciousRingMembers().length > 0) {
+    <div class="ioHeader" style="margin-top: 30px; color: #d93025">
+      Notable Ring Members: {{suspiciousRingMembers().length}}
+    </div>
+    <div class="input">
+      <div class="ring_member header">
+        <div>Ring Member:</div>
+        <div>Reason:</div>
+        <div>Block Height:</div>
+        <div>Decoy Usage:</div>
+      </div>
+      @for (item of suspiciousRingMembers() | slice: 0 : notableRMsLimit(); track item.rm; let
+      isLast = $last) {
+      <div class="ring_member">
+        <div [class]="'circle ' + item.colorClass"></div>
+        <div
+          class="mobileFlexOutput"
+          (click)="navigateToParentTx(item.rm.parent_transaction, item.rm.hash)"
+        >
+          <span class="lighterTextMobile">Ring Member:&nbsp;</span>
+          <span class="mono">{{ item.rm.hash }}</span>
+        </div>
+        <div class="parentTx mobileFlexOutput">
+          <span class="lighterTextMobile">Reason:&nbsp;</span>
+          <span>{{ item.reason }}</span>
+        </div>
+        <div class="mobileFlexOutput" (click)="navigateToBlock(item.rm.block_height)">
+          <span class="lighterTextMobile">Block:&nbsp;</span>{{ item.rm.block_height }}
+        </div>
+        <div class="mobileFlexOutput">
+          <span class="lighterTextMobile">Usage:&nbsp;</span>{{ item.rm.decoy_count }}
+        </div>
+      </div>
+      } @if (suspiciousRingMembers().length > notableRMsLimit()) {
+      <div class="desktop">
+        <div class="ring_member" style="margin-top: 5px" (click)="increaseNotableRMsLimit()">
+          <div class="mobileFlexOutput">
+            <span class="showMoreText"
+              >Show remaining {{ suspiciousRingMembers().length - notableRMsLimit() }}</span
+            >
+          </div>
+        </div>
+      </div>
+      <div class="mobile">
+        <div class="load-more-container">
+          <button class="viewAllButtonNew" (click)="increaseNotableRMsLimit()">
+            Show remaining {{ suspiciousRingMembers().length - notableRMsLimit() }}
+          </button>
+        </div>
+      </div>
+
+      }
+    </div>
+    } @if (transactionData.inputs[0].key_image != "") {
+    <div class="ioHeader" id="inputsHeader">Inputs: {{ transactionData.inputs.length }}</div>
+    @for (input of transactionData.inputs | slice: 0 : inputsLimit(); track input; let count =
+    $index; let isLast = $last) {
+    <div class="input">
+      <div class="key_image">
+        Amount:
+        <span class="lighterText">
+          @if (input.amount) { {{ (input.amount/1000000000000).toFixed(11) }}<span
+            class="lighterText"
+          >
+            ɱ</span
+          >
+          } @else { ? }
+        </span>
+      </div>
+      <div class="key_image" (click)="toggleRingMembers(input.key_image)">
+        Key Image {{ count | number:'2.0-0' }}:
+        <span class="lighterText mono2">{{ input.key_image }}</span>
+      </div>
+
+      @if (!isRingMembersCollapsed(input.key_image)) {
+      <div class="ring_member header">
+        <div>Ring Member:</div>
+        <div>Parent Transaction:</div>
+        <div>Block Height:</div>
+        <div>Decoy Usage:</div>
+      </div>
+
+      @for (rm of input.ring_members; track rm; let isLastItem = $last) {
+      <div class="ring_member" [class.lastItemMargin]="isLastItem && !isLast">
+        @if (rm.hash == "0000000000000000000000000000000000000000000000000000000000000000" ||
+        rm.hash == "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead000f") {
+        <div class="circle circle-red"></div>
+        } @else if (rm.is_coinbase) {
+        <div class="circle circle-darkblue"></div>
+        } @else if (isSharedParent(rm.parent_transaction)) {
+        <div class="circle circle-black"></div>
+        } @else if (transactionData.block_height - rm.block_height == 10) {
+        <div class="circle circle-blue"></div>
+        } @else if (transactionData.block_height - rm.block_height <= 1440) {
+        <div class="circle circle-orange"></div>
+        } @else if (transactionData.block_height - rm.block_height <= 21600) {
+        <div class="circle circle-yellow"></div>
+        } @else {
+        <div class="circle circle-grey"></div>
+        }
+        <div class="mobileFlexOutput" (click)="navigateToParentTx(rm.parent_transaction, rm.hash)">
+          <span class="lighterTextMobile">Ring Member:&nbsp;</span
+          ><span class="mono">{{ rm.hash }}</span>
+        </div>
+
+        <div class="mobileRingMemberDetails">
+          <div
+            class="parentTx mobileFlexOutput"
+            (click)="navigateToParentTx(rm.parent_transaction, rm.hash)"
+          >
+            <span class="lighterTextMobile">Parent Tx:&nbsp;</span>
+            <span class="mono"
+              >{{ rm.parent_transaction.substring(0, 4) }}…{{ rm.parent_transaction.slice(-4)
+              }}</span
+            >
+          </div>
+
+          <div class="mobileFlexOutput" (click)="navigateToBlock(rm.block_height)">
+            <span class="lighterTextMobile">Block:&nbsp;</span>{{ rm.block_height }}
+          </div>
+          <div class="mobileFlexOutput">
+            <span class="lighterTextMobile">Usage:&nbsp;</span>{{ rm.decoy_count }}
+          </div>
+        </div>
+        <div
+          class="parentTx mobileFlexOutput mobileHidden"
+          (click)="navigateToParentTx(rm.parent_transaction, rm.hash)"
+        >
+          <span class="lighterTextMobile">Parent Tx:&nbsp;</span>
+          <span class="mono"
+            >{{ rm.parent_transaction.substring(0, 4) }}…{{ rm.parent_transaction.slice(-4) }}</span
+          >
+        </div>
+
+        <div class="mobileFlexOutput mobileHidden" (click)="navigateToBlock(rm.block_height)">
+          <span class="lighterTextMobile">Block:&nbsp;</span>{{ rm.block_height }}
+        </div>
+        <div class="mobileFlexOutput mobileHidden">
+          <span class="lighterTextMobile">Usage:&nbsp;</span>{{ rm.decoy_count }}
+        </div>
+      </div>
+      } }
+    </div>
+    } @if (transactionData.inputs.length > inputsLimit()) {
+    <div class="desktop">
+      <div class="ring_member" style="margin-top: 5px">
+        <div class="mobileFlexOutput" (click)="increaseInputsLimit()">
+          <span class="showMoreText"
+            >Show remaining {{ transactionData.inputs.length - inputsLimit() }}</span
+          >
+        </div>
+      </div>
+    </div>
+    <div class="mobile">
+      <div class="load-more-container">
+        <button class="viewAllButtonNew" (click)="increaseInputsLimit()">
+          Show remaining {{ transactionData.inputs.length - inputsLimit() }}
+        </button>
+      </div>
+    </div>
+
+    } } } } @if (!isLoading() && hasLoaded()) {
+    <div style="margin-top: 30px; display: flex; flex-direction: column; align-items: center">
+      <div class="desktop">
+        <span class="showMoreText" (click)="toggleJson()">
+          {{ isJsonVisible() ? 'Hide JSON of TX' : 'Show JSON of TX' }}
+        </span>
+      </div>
+
+      <div class="mobile" style="width: 100%">
+        <div class="load-more-container" style="justify-content: center">
+          <button class="viewAllButtonNew" (click)="toggleJson()">
+            {{ isJsonVisible() ? 'Hide JSON of TX' : 'Show JSON of TX' }}
+          </button>
+        </div>
+      </div>
+
+      @if (isJsonVisible() && transactionJson) {
+      <pre
+        style="
+          margin-top: 15px;
+          border: var(--txGraphBorder);
+          color: var(--text);
+          padding: 15px;
+          border-radius: 5px;
+          overflow-x: auto;
+          width: var(--frameWidth);
+          max-width: 100%;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          text-align: left;
+        "
+      >
+{{ transactionJson | json }}</pre
+      >
+      }
+    </div>
+    }
+  </div>
+
+  <div #tooltip class="tooltip"></div>
+</div>

@@ -1,0 +1,426 @@
+* {
+  font-family: 'Inter Tight', sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.frame {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background-color: rgb(0 0 0 / 30%);
+  z-index: 9999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal {
+  padding: 30px 30px 10px 30px;
+  width: fit-content;
+  max-width: min(600px, 100% - 20px);
+  height: fit-content;
+  max-height: 70vh;
+  overflow-y: auto;
+  border-radius: 20px;
+  background-color: var(--modalBackground);
+  border: var(--modalBorder);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 20px;
+  color: var(--text);
+  pointer-events: auto;
+  box-shadow: var(--searchFocusBoxShadow);
+
+  .heading {
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  .top {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+
+    .close {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s;
+      padding: 8px;
+      border-radius: 50%;
+      background: var(--closeButtonBackground);
+
+      &:hover {
+        opacity: 0.7;
+      }
+
+      svg {
+        width: 20px;
+        height: 20px;
+        fill: var(--text);
+      }
+    }
+  }
+
+  .content {
+    letter-spacing: 0.2px;
+    color: var(--textLighter);
+    line-height: 26px;
+    font-size: 14px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-weight: 380;
+  }
+
+  .legend-content {
+    font-size: 13px;
+  }
+
+  .legend-section {
+    margin-bottom: 20px;
+
+    h4 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 10px;
+    }
+
+    ul {
+      padding-left: 20px;
+      margin: 0;
+
+      li {
+        margin-bottom: 5px;
+      }
+    }
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+    line-height: 1.4;
+    font-weight: 450;
+
+    strong {
+      font-weight: 600;
+    }
+  }
+
+  .symbol {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .tx-rect {
+    width: 20px;
+    height: 15px;
+    border: 0.5px solid var(--graphNodeStroke);
+    border-radius: 4px;
+    background: var(--graphNodeFill);
+  }
+
+  .square {
+    width: 20px;
+    height: 20px;
+    border: 0.5px solid var(--graphNodeStroke);
+    border-radius: 4px;
+    background: rgb(242, 104, 34);
+  }
+
+  .input-shape {
+    width: 10px;
+    height: 10px;
+    background: #00bcd4;
+    transform: rotate(45deg);
+    margin: 0 4px;
+  }
+
+  .output-shape {
+    width: 0;
+    height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 10px solid steelblue;
+    margin-left: 4px;
+  }
+
+  .edge-green {
+    margin-top: 6px;
+    width: 20px;
+    height: 5px;
+    border-radius: 4px;
+    background-color: rgb(88, 152, 82);
+  }
+
+  .circle-grey {
+    width: 12px;
+    height: 12px;
+    background: #fccba0;
+    border-radius: 30%;
+  }
+
+  .circle-grey-age0 {
+    width: 12px;
+    height: 12px;
+    background: var(--graphSegmentAge0);
+    border-radius: 30%;
+  }
+
+  .circle-green {
+    width: 12px;
+    height: 12px;
+    background: #59a14f;
+    border-radius: 30%;
+  }
+
+  .circle-orange {
+    width: 12px;
+    height: 12px;
+    background: #f97e13;
+    border-radius: 30%;
+  }
+
+  .circle-red {
+    width: 12px;
+    height: 12px;
+    background: rgb(249 0 0);
+    border-radius: 30%;
+  }
+
+  .circle-yellow {
+    width: 12px;
+    height: 12px;
+    background: #faa459;
+    border-radius: 30%;
+  }
+
+  .circle-black {
+    width: 12px;
+    height: 12px;
+    background: #bf8bff;
+    border-radius: 30%;
+  }
+
+  .circle-blue {
+    width: 12px;
+    height: 12px;
+    background: #82b8ffff;
+    border-radius: 30%;
+  }
+
+  .circle-darkblue {
+    width: 12px;
+    height: 12px;
+    background: rgb(17, 82, 174);
+    border-radius: 30%;
+  }
+
+  .circle-pink {
+    width: 12px;
+    height: 12px;
+    background: #ff00ff;
+    border-radius: 30%;
+  }
+
+  .edit-label-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-top: 10px;
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+
+      label {
+        font-size: 13px;
+        color: var(--textLighter);
+        font-weight: 500;
+      }
+
+      input[type='text'] {
+        background: var(--searchBackground);
+        border: var(--searchBorder);
+        color: var(--text);
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.1s;
+        font-weight: 450;
+
+        &:focus {
+          border-color: var(--accent);
+        }
+      }
+
+      .color-presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 5px;
+
+        .color-circle {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          cursor: pointer;
+          border: 2px solid transparent;
+          transition:
+            transform 0.1s,
+            border-color 0.1s;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          &:hover {
+            transform: scale(1.1);
+          }
+
+          &.selected {
+            transform: scale(1.1);
+            box-shadow:
+              0 0 0 2px var(--modalBackground),
+              0 0 0 4px currentColor;
+          }
+
+          &.custom-circle {
+            border: 2px dashed var(--inputBorder);
+            background: transparent;
+
+            &.selected {
+              border: 2px solid transparent;
+              // background: var(--inputBackground);
+            }
+
+            svg {
+              width: 20px;
+              height: 20px;
+              fill: var(--textLighter);
+              pointer-events: none;
+            }
+
+            input[type='color'] {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              opacity: 0;
+              cursor: pointer;
+              padding: 0;
+              margin: 0;
+            }
+          }
+        }
+      }
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+
+      button {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 12px;
+        border-radius: 10px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 34px;
+        transition: filter 0.2s;
+        font-weight: 450;
+        letter-spacing: 0.3px;
+
+        &:hover {
+          filter: brightness(1.1);
+        }
+
+        &.btn-delete {
+          margin-right: auto;
+          background: var(--deleteButtonBackground);
+          color: var(--deleteButtonColor);
+          border: var(--deleteButtonBorder);
+        }
+
+        &.btn-cancel {
+          background: transparent;
+          color: var(--text);
+          border: none;
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.05);
+          }
+        }
+
+        &.btn-save {
+          background: var(--saveButtonBackground);
+          color: var(--saveButtonColor);
+          border: var(--saveButtonBorder);
+        }
+      }
+    }
+  }
+}
+
+.vertical-actions {
+  display: flex;
+  flex-direction: column;
+  row-gap: 10px;
+  margin-bottom: 20px;
+
+  .btn-save {
+    width: 100%;
+    padding: 10px;
+    border: var(--searchBorder);
+    border-radius: 10px;
+    background: var(--modeSwitchButtonActive);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: filter 0.2s;
+
+    &:hover {
+      background: var(--modeSwitchBackground);
+    }
+  }
+}
+
+@media only screen and (max-width: 700px) {
+  .modal {
+    padding: 20px 20px;
+    width: fit-content;
+    border-radius: 12px;
+    max-width: min(600px, 100% - 50px);
+  }
+
+  .heading {
+    font-size: 18px !important;
+  }
+
+  .content {
+    font-size: 12px;
+  }
+}

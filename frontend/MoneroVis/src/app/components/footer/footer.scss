@@ -1,0 +1,68 @@
+.footerContainer {
+  height: 60px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  margin-top: 2px;
+}
+
+.desktopOnly {
+  display: block;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.footerFrame {
+  width: var(--frameWidth);
+  height: 50px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--searchBackground);
+  border: var(--txGraphBorder);
+  border-radius: 10px;
+  gap: 10px;
+}
+
+.footerContent {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+  justify-content: center;
+}
+
+.footerText {
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 14px;
+  font-weight: 450;
+  color: var(--footerText);
+  letter-spacing: -0.1px;
+  display: flex;
+
+  a {
+    color: var(--footerText);
+    cursor: pointer;
+  }
+}
+
+.footerImage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 1px;
+  position: relative;
+}
+
+@media only screen and (max-width: 500px) {
+  .footerImage {
+    top: 0px;
+  }
+}
+
+@media only screen and (max-width: 350px) {
+  .desktopOnly {
+    display: none;
+  }
+}

@@ -1,0 +1,10 @@
+@if (showSearchBar()) {
+<app-search-bar></app-search-bar>
+}
+<app-sidebar></app-sidebar>
+<app-modal></app-modal>
+<app-decoy-map></app-decoy-map>
+<div div [class.container]="showSearchBar()">
+  <router-outlet></router-outlet>
+</div>
+<app-footer></app-footer>

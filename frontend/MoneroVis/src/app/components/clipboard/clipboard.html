@@ -1,0 +1,428 @@
+<div class="clipboard-container">
+  <div class="mode-switcher">
+    <button
+      [class.active]="service.mode() === 'simple'"
+      (click)="setMode('simple')"
+      title="Simplified, automated tracing mode"
+    >
+      Auto
+    </button>
+    <button
+      [class.active]="service.mode() === 'advanced'"
+      (click)="setMode('advanced')"
+      title="Advanced, manual analysis with tabs"
+    >
+      Advanced
+    </button>
+  </div>
+
+  @if (service.mode() === 'simple') {
+  <div class="sheet-header">
+    <span class="title">
+      Trace Poisoned Outputs
+      <span class="lighterSmall" *ngIf="totalAutomatedCount() > 0">
+        ({{ totalAutomatedCount() }})
+      </span>
+    </span>
+    <button
+      *ngIf="service.automatedResults()"
+      class="action-btn delete-btn"
+      (click)="clearAutomatedResults()"
+      title="Clear Trace"
+      style="background: none; border: none; font-size: 14px; color: #999; cursor: pointer"
+    >
+      &times;
+    </button>
+  </div>
+  <div class="sheet-input">
+    <textarea
+      [(ngModel)]="batchInputValue"
+      (keydown)="handleBatchKeydown($event)"
+      placeholder="Paste initial transaction hashes (comma or newline separated)..."
+      rows="3"
+    ></textarea>
+    <button class="add-btn" (click)="startAutomatedTrace()" [disabled]="isLoading()">
+      @if (isLoading()) {
+      <div class="spinner"></div>
+      } @else { Start }
+    </button>
+  </div>
+  <div class="sheet-content">
+    <ng-container *ngIf="service.automatedResults() as results">
+      <div *ngFor="let group of results; let i = index" class="group-section">
+        <div
+          class="group-header"
+          [style.border-left-color]="automatedResultColors()[i]"
+          (click)="toggleGroupCollapse('consolidation-' + i)"
+        >
+          <span class="arrow-icon" [class.collapsed]="isCollapsed('consolidation-' + i)">▼</span>
+          <span class="group-name" [style.color]="automatedResultColors()[i]">
+            @if (i === 0) { Initial Transactions } @else { Consolidation {{ i }} }
+          </span>
+          <span class="group-count" *ngIf="isCollapsed('consolidation-' + i)"
+            >{{ group.length }}</span
+          >
+
+          <div class="header-actions">
+            <button
+              class="action-btn copy-btn"
+              (click)="copyText(getTxGroupHashes(group), $event, 'consolidation-' + i)"
+              title="Copy Hashes"
+            >
+              <ng-container *ngIf="justCopiedGroupId() !== 'consolidation-' + i; else copiedIcon">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  height="12px"
+                  viewBox="0 0 24 24"
+                  width="12px"
+                >
+                  <path d="M0 0h24v24H0z" fill="none" />
+                  <path
+                    d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                  />
+                </svg>
+              </ng-container>
+              <ng-template #copiedIcon>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  height="12px"
+                  viewBox="0 0 24 24"
+                  width="12px"
+                >
+                  <path d="M0 0h24v24H0z" fill="none" />
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                </svg>
+              </ng-template>
+            </button>
+          </div>
+        </div>
+
+        <ul class="item-list" *ngIf="!isCollapsed('consolidation-' + i)">
+          <li
+            *ngFor="let tx of group | slice: 0 : getLimit('consolidation-' + i)"
+            class="list-item"
+          >
+            <div class="item-row">
+              <div class="color-dot" [style.background-color]="automatedResultColors()[i]"></div>
+              <div class="item-data">
+                <a class="hash" [routerLink]="['/tx', tx.tx_hash]"> {{ tx.tx_hash }} </a>
+              </div>
+            </div>
+          </li>
+        </ul>
+        <div *ngIf="group.length > getLimit('consolidation-' + i)" class="load-more-container">
+          <button class="load-more-btn" (click)="increaseLimit('consolidation-' + i)">
+            Show more
+          </button>
+          <span class="count-display"
+            >Showing {{ getLimit('consolidation-' + i) }} of {{ group.length }}</span
+          >
+        </div>
+      </div>
+    </ng-container>
+
+    <div *ngIf="!service.automatedResults()" class="empty-state">
+      <p>No data added yet.</p>
+      <small>Paste one or more transaction hashes above and click "Start" to begin.</small>
+    </div>
+  </div>
+  } @else {
+  <div class="clipboard-sheet">
+    <div class="tab-bar">
+      <ng-container *ngFor="let tab of service.tabs()">
+        <button
+          class="tab-btn"
+          [class.active]="tab.id === service.activeTabId()"
+          (click)="service.switchToTab(tab.id)"
+          (dblclick)="startEditTab(tab, $event)"
+        >
+          <ng-container *ngIf="editingTabId() !== tab.id; else editTabInput">
+            {{ tab.name }}
+          </ng-container>
+          <ng-template #editTabInput>
+            <input
+              type="text"
+              class="tab-name-edit"
+              [(ngModel)]="tempTabName"
+              (keydown)="handleTabEditKeydown($event)"
+              (click)="$event.stopPropagation()"
+              (blur)="saveEditTab()"
+              autofocus
+            />
+          </ng-template>
+          <span
+            *ngIf="editingTabId() !== tab.id && service.tabs().length > 1"
+            class="close-tab-btn"
+            (click)="deleteTab(tab.id, $event)"
+            >&times;</span
+          >
+        </button>
+      </ng-container>
+      <button class="add-tab-btn" (click)="addTab()">+</button>
+    </div>
+
+    <div class="sheet-header">
+      <span class="title"
+        >Hashboard
+        <span class="lighterSmall" *ngIf="service.totalCount() > 0">
+          ({{ service.totalCount() }})
+        </span></span
+      >
+      <div class="actions">
+        <button
+          *ngIf="addMode === 'manual'"
+          class="icon-btn"
+          (click)="toggleGroupForm()"
+          title="Create New Category/Group"
+        >
+          {{ showNewGroupForm() ? 'Cancel' : '+ Group' }}
+        </button>
+        <button
+          class="icon-btn highlight-btn"
+          [class.active]="service.highlightedTabIds().has(service.activeTabId())"
+          (click)="toggleActiveTabHighlight($event)"
+          title="Toggle Highlight All in Current Tab"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" height="14px" viewBox="0 0 24 24" width="14px">
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path
+              d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+            />
+          </svg>
+        </button>
+        <button class="text-btn" (click)="copyAllHashes()">
+          @if (justCopiedAll()) { Copied! } @else { Copy All }
+        </button>
+        <button class="text-btn" (click)="service.clearAll()">Clear All</button>
+      </div>
+    </div>
+
+    <div *ngIf="showNewGroupForm()" class="group-creator">
+      <input type="color" [(ngModel)]="newGroupColor" title="Group Color" />
+      <input
+        type="text"
+        [(ngModel)]="newGroupName"
+        placeholder="Enter Group Name..."
+        (keydown.enter)="createGroup()"
+      />
+      <button (click)="createGroup()">Save</button>
+    </div>
+
+    <div class="add-mode-selector">
+      <label
+        ><input type="radio" name="add-mode" value="manual" [(ngModel)]="addMode" /> Manual</label
+      >
+      <label
+        ><input type="radio" name="add-mode" value="indices" [(ngModel)]="addMode" /> By
+        Indices</label
+      >
+      <label
+        ><input type="radio" name="add-mode" value="hashes" [(ngModel)]="addMode" /> By
+        Hashes</label
+      >
+    </div>
+
+    <div *ngIf="!showNewGroupForm() && addMode === 'manual'" class="sheet-input">
+      <select [(ngModel)]="selectedCategoryId" class="category-select">
+        <option *ngFor="let cat of service.categories()" [value]="cat.id">{{ cat.name }}</option>
+      </select>
+      <textarea
+        [(ngModel)]="inputValue"
+        (keydown)="handleKeydown($event)"
+        placeholder="Paste (comma separated) hashes..."
+        rows="3"
+      ></textarea>
+      <button class="add-btn" (click)="importFromInput()">Add</button>
+    </div>
+
+    <div
+      *ngIf="!showNewGroupForm() && (addMode === 'indices' || addMode === 'hashes')"
+      class="sheet-input"
+    >
+      <textarea
+        [(ngModel)]="batchInputValue"
+        (keydown)="handleBatchKeydown($event)"
+        [placeholder]="
+          addMode === 'indices'
+            ? 'Paste (comma separated) output indices...'
+            : 'Paste (comma separated) tx hashes...'
+        "
+        rows="3"
+      ></textarea>
+      <button class="add-btn" (click)="importBatch()" [disabled]="isLoading()">
+        @if (isLoading()) {
+        <div class="spinner"></div>
+        } @else { Fetch & Add }
+      </button>
+    </div>
+
+    <div class="sheet-content">
+      <div
+        *ngFor="let group of service.groupedItems(); trackBy: trackByGroup"
+        class="group-section"
+      >
+        <div
+          *ngIf="group.items.length > 0 || group.id !== 'default'"
+          class="group-header"
+          [style.border-left-color]="group.color"
+          (click)="toggleGroupCollapse(group.id)"
+        >
+          <ng-container *ngIf="editingGroupId() === group.id; else displayMode">
+            <input
+              type="text"
+              class="group-name-edit"
+              [(ngModel)]="tempGroupName"
+              (keydown)="handleEditKeydown($event)"
+              (click)="$event.stopPropagation()"
+              (blur)="saveEditGroup()"
+              autofocus
+            />
+          </ng-container>
+
+          <ng-template #displayMode>
+            <span class="arrow-icon" [class.collapsed]="isCollapsed(group.id)">▼</span>
+
+            <span class="group-name" [style.color]="group.color">
+              {{ group.name }}
+              <span *ngIf="group.id === 'suspicious'" style="opacity: 0.8">
+                ({{ group.items.length }})
+              </span>
+            </span>
+
+            <span class="group-count" *ngIf="isCollapsed(group.id) && group.id !== 'suspicious'"
+              >{{ group.items.length }}</span
+            >
+
+            <div class="header-actions">
+              <button
+                class="action-btn highlight-btn"
+                [class.active]="service.highlightedGroupIds().has(group.id)"
+                (click)="toggleHighlightGroup(group.id, $event)"
+                title="Toggle Highlight"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  height="14px"
+                  viewBox="0 0 24 24"
+                  width="14px"
+                >
+                  <path d="M0 0h24v24H0z" fill="none" />
+                  <path
+                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="action-btn copy-btn"
+                (click)="copyGroupHashes(group, $event)"
+                title="Copy Hashes"
+              >
+                <ng-container *ngIf="justCopiedGroupId() !== group.id; else copiedIcon">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    height="12px"
+                    viewBox="0 0 24 24"
+                    width="12px"
+                  >
+                    <path d="M0 0h24v24H0z" fill="none" />
+                    <path
+                      d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                    />
+                  </svg>
+                </ng-container>
+                <ng-template #copiedIcon>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    height="12px"
+                    viewBox="0 0 24 24"
+                    width="12px"
+                  >
+                    <path d="M0 0h24v24H0z" fill="none" />
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                  </svg>
+                </ng-template>
+              </button>
+              <button
+                *ngIf="group.id !== 'default' && group.id !== 'suspicious'"
+                class="action-btn edit-btn"
+                (click)="startEditGroup($event, group)"
+                title="Rename Group"
+              >
+                ✎
+              </button>
+
+              <button
+                *ngIf="group.id !== 'default' && group.id !== 'suspicious'"
+                (click)="$event.stopPropagation(); service.deleteCategory(group.id)"
+                class="action-btn delete-btn"
+                title="Delete Group"
+              >
+                &times;
+              </button>
+            </div>
+          </ng-template>
+        </div>
+
+        <ul class="item-list" *ngIf="!isCollapsed(group.id)">
+          <li
+            *ngFor="
+              let item of group.items | slice: 0 : getLimit(group.id);
+              trackBy: trackByItem
+            "
+            class="list-item"
+          >
+            <div class="item-row">
+              <div class="color-dot" [style.background-color]="group.color"></div>
+              <div class="item-data">
+                <a
+                  class="hash"
+                  [routerLink]="['/tx', item.value]"
+                  [class.duplicate]="(service.hashCounts().get(item.value) || 0) > 1"
+                >
+                  {{ item.value }}
+                  <span
+                    *ngIf="
+                      (service.hashCounts().get(item.value) || 0) > 1 &&
+                      group.id !== 'suspicious'
+                    "
+                    class="duplicate-count"
+                  >
+                    (x{{ service.hashCounts().get(item.value) }})
+                  </span>
+                </a>
+
+                <div *ngIf="group.id === 'suspicious'" class="note-display">{{ item.note }}</div>
+                <input
+                  *ngIf="group.id !== 'suspicious'"
+                  class="note-input"
+                  [ngModel]="item.note"
+                  (ngModelChange)="service.updateItemNote(item.id, $event)"
+                  placeholder="+ Add note..."
+                />
+              </div>
+              <button
+                *ngIf="group.id !== 'suspicious'"
+                class="remove-btn"
+                (click)="service.removeItem(item.id)"
+              >
+                &times;
+              </button>
+            </div>
+          </li>
+        </ul>
+        <div *ngIf="group.items.length > getLimit(group.id)" class="load-more-container">
+          <button class="load-more-btn" (click)="increaseLimit(group.id)">Show more</button>
+          <span class="count-display"
+            >Showing {{ getLimit(group.id) }} of {{ group.items.length }}</span
+          >
+        </div>
+      </div>
+
+      <div *ngIf="service.totalCount() === 0" class="empty-state">
+        <p>No data added yet.</p>
+        <small>Paste one or more transaction hashes above and click "Fetch & Add" to begin.</small>
+      </div>
+    </div>
+  </div>
+  }
+</div>

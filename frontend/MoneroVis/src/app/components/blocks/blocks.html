@@ -1,0 +1,229 @@
+<div id="frame">
+  <div class="container2">
+    <div class="pathContainer">
+      <div class="path">
+        <div class="lighter">
+          <span><a class="lighter" (click)="navigateToHome()">Home</a> › </span
+          ><span class="pathActive">Blocks</span>
+        </div>
+      </div>
+    </div>
+    <div class="headingContainer">
+      <div class="heading">
+        <span>Blocks</span>
+        <div class="buttons">
+          <button class="info-btn" (click)="toggleLegend()" title="Legend & Help">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#e8eaed"
+            >
+              <path
+                d="M480-280q17 0 28.5-11.5T520-320v-160q0-17-11.5-28.5T480-520q-17 0-28.5 11.5T440-480v160q0 17 11.5 28.5T480-280Zm0-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"
+              />
+            </svg>
+          </button>
+          <button
+            class="info-btn motion-btn"
+            (click)="toggleScrollMode()"
+            [title]="isInstantScroll() ? 'Switch to Smooth Scroll' : 'Switch to Instant Scroll'"
+          >
+            @if (isInstantScroll()) {
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#e3e3e3"
+            >
+              <path
+                d="m431-341 184-122q9-6 9-17t-9-17L431-619q-10-7-20.5-1.5T400-603v246q0 12 10.5 17.5T431-341Zm49 261q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-32 5-64t15-63q5-16 20.5-21.5T150-626q15 8 21.5 23.5T173-570q-6 22-9.5 44.5T160-480q0 134 93 227t227 93q134 0 227-93t93-227q0-134-93-227t-227-93q-24 0-47.5 3.5T386-786q-17 5-32-1t-22-21q-7-15-.5-30.5T354-859q30-11 62-16t64-5q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80ZM177.5-697.5Q160-715 160-740t17.5-42.5Q195-800 220-800t42.5 17.5Q280-765 280-740t-17.5 42.5Q245-680 220-680t-42.5-17.5ZM480-480Z"
+              />
+            </svg>
+            } @else {
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#e3e3e3"
+            >
+              <path
+                d="M428.5-371.5Q440-383 440-400v-160q0-17-11.5-28.5T400-600q-17 0-28.5 11.5T360-560v160q0 17 11.5 28.5T400-360q17 0 28.5-11.5Zm160 0Q600-383 600-400v-160q0-17-11.5-28.5T560-600q-17 0-28.5 11.5T520-560v160q0 17 11.5 28.5T560-360q17 0 28.5-11.5ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-32 5-64t15-63q5-16 20.5-21.5T150-626q15 8 21.5 23.5T173-570q-6 22-9.5 44.5T160-480q0 134 93 227t227 93q134 0 227-93t93-227q0-134-93-227t-227-93q-24 0-47.5 3.5T386-786q-17 5-32-1t-22-21q-7-15-.5-30.5T354-859q30-11 62-16t64-5q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80ZM177.5-697.5Q160-715 160-740t17.5-42.5Q195-800 220-800t42.5 17.5Q280-765 280-740t-17.5 42.5Q245-680 220-680t-42.5-17.5ZM480-480Z"
+              />
+            </svg>
+            }
+          </button>
+        </div>
+      </div>
+      <div class="headingInfo">
+        Latest Block: @if (isLoading()) {
+        <span class="headingInfoBlock"></span>
+        } @else {
+        <span class="headingInfoBlock" (click)="navigateToBlock(totalBlocks - 1)"
+          >{{ totalBlocks - 1 }}</span
+        >
+        }
+      </div>
+    </div>
+
+    @if (isLoading()) {
+    <div class="content-wrapper">
+      <div class="loader-container skeleton">
+        <app-loader></app-loader>
+      </div>
+
+      <div class="ioHeaderSkeleton skeleton"></div>
+
+      <div class="skeletonRows">
+        @for (num of numbers; track num) {
+        <div class="skeletonRow skeleton"></div>
+        }
+      </div>
+    </div>
+
+    } @else {
+    <div class="content-wrapper">
+      <div #chartContainer class="chart-container" tabindex="0"></div>
+
+      <div class="ioHeader">
+        Page {{ currentPage }} <span class="smallText">( of {{ totalPages }})</span>
+      </div>
+      <div class="desktop">
+        <div class="input">
+          <div class="ring_member header">
+            <div>Height:</div>
+            <div>Hash:</div>
+            <div>Transactions:</div>
+            <div>Block Reward:</div>
+            <div>Age:</div>
+          </div>
+          @for (block of blocks; track block.hash; let isLast = $last) {
+          <div
+            class="ring_member"
+            [class.lastItemMargin]="isLast"
+            [class.highlighted]="block.height === hoveredBlockHeight"
+            (mouseenter)="onListHover(block.height)"
+            (mouseleave)="onListHover(null)"
+            (click)="navigateToBlock(block.height)"
+          >
+            <div class="mobileFlexOutput" (click)="navigateToBlock(block.height)">
+              <span class="lighterTextMobile">Height: </span>
+              <span class="boldText">{{ block.height }}</span>
+            </div>
+            <div class="mobileFlexOutput" (click)="navigateToBlock(block.height)">
+              <span class="lighterTextMobile">Hash: </span>
+              <span class="mono">{{ block.hash }}</span>
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Txs: </span>{{ block.txCount }}
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Reward: </span>{{ block.reward.toFixed(8) }}<span
+                class="lighterText"
+              >
+                ɱ</span
+              >
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Age: </span>
+              <span>{{ block.relativeTime }}</span>
+            </div>
+          </div>
+          }
+        </div>
+      </div>
+
+      <div class="mobile">
+        @for (block of blocks; track block.hash; let isLast = $last) {
+        <div
+          class="ring_member"
+          [class.lastItemMargin]="isLast"
+          [class.highlighted]="block.height === hoveredBlockHeight"
+          (mouseenter)="onListHover(block.height)"
+          (mouseleave)="onListHover(null)"
+          (click)="navigateToBlock(block.height)"
+        >
+          <div class="mobileFlexOutputHash" (click)="navigateToBlock(block.height)">
+            <span class="lighterTextMobile">Hash: &nbsp;</span>
+            <span class="mono">{{ block.hash }}</span>
+          </div>
+          <div class="mobileFlexOutput" (click)="navigateToBlock(block.height)">
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Height: &nbsp;<span class="mobileSpaces">&nbsp;&nbsp;</span></span
+              >
+              <span>{{ block.height }}</span>
+            </div>
+
+            <div class="mobileFlexOutput2 mobileFlexOutputHidden">
+              <span class="lighterTextMobile">Height: &nbsp; </span>
+              <span>{{ block.height }}</span>
+              <span class="lighter dotSeparator2">&nbsp;∙&nbsp;</span>
+              <span class="lighterTextMobile">{{ block.txCount }} Txs</span>
+              <span class="lighter dotSeparator2">&nbsp;∙&nbsp;</span>
+              <span class="lighterTextMobile">{{ block.relativeTime }}</span>
+            </div>
+
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Txs: &nbsp;<span class="mobileSpaces"
+                  >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                ></span
+              >{{ block.txCount }}
+            </div>
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile">Reward: &nbsp;<span class="mobileSpaces"></span></span
+              >{{ block.reward }}ɱ
+            </div>
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Age: &nbsp;<span class="mobileSpaces"
+                  >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                ></span
+              >
+              <span>{{ block.relativeTime }}</span>
+            </div>
+          </div>
+        </div>
+        }
+      </div>
+
+      <div class="pagination" *ngIf="totalPages > 1">
+        <button
+          (click)="onPageChange(currentPage - 1)"
+          [disabled]="currentPage === 1"
+          class="page-btn prev"
+        >
+          ‹ Prev
+        </button>
+
+        <ng-container *ngFor="let p of pages">
+          <button
+            *ngIf="p !== '...'"
+            (click)="onPageChange(p)"
+            class="page-btn number"
+            [class.active]="p === currentPage"
+          >
+            {{ p }}
+          </button>
+          <span *ngIf="p === '...'" class="dots">...</span>
+        </ng-container>
+
+        <button
+          (click)="onPageChange(currentPage + 1)"
+          [disabled]="currentPage === totalPages"
+          class="page-btn next"
+        >
+          Next ›
+        </button>
+      </div>
+    </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,134 @@
+.frame {
+  width: 100vw;
+  height: fit-content;
+  min-height: 100vh;
+  background-color: var(--background);
+  display: flex;
+  flex-direction: column;
+  justify-content: start;
+  align-items: center;
+  gap: 50px;
+}
+
+.container {
+  width: var(--frameWidth);
+  height: fit-content;
+  color: var(--text);
+  font-family: 'Inter Tight', sans-serif;
+  font-optical-sizing: auto;
+  font-weight: var(--fontWeight);
+  font-size: 14px;
+  margin-top: 54px;
+}
+
+.headingContainer {
+  margin-top: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.heading {
+  font-size: 35px;
+  display: flex;
+  justify-content: space-between;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.headingInfo {
+  margin-bottom: 30px;
+  font-size: 20px;
+  color: var(--textLighter);
+
+  .headingInfoBlock {
+    color: var(--pathActive);
+    cursor: pointer;
+  }
+}
+
+.homeButton {
+  margin-top: 20px;
+  background: var(--addButtonBackground);
+  color: var(--addButtonColor);
+  border: var(--addButtonBorder);
+  padding: 12px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 15px;
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  align-items: center;
+
+  svg {
+    fill: var(--addButtonColor);
+    -webkit-transform: scale(-0.9, 0.9);
+    -moz-transform: scale(-0.9, 0.9);
+    -o-transform: scale-(0.9, 0.9);
+    transform: scale(-0.9, 0.9);
+  }
+}
+
+.pathContainer {
+  height: 50px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  letter-spacing: 0.15px;
+
+  .pathActive {
+    color: var(--pathActive);
+  }
+}
+
+a:hover {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.lighter {
+  color: var(--textLighter);
+}
+
+@media (max-width: 900px) {
+  .heading {
+    font-size: 25px;
+  }
+
+  .headingInfo {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 500px) {
+  .heading {
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .headingInfo {
+    font-size: 15px;
+    text-align: center;
+  }
+
+  .homeButton {
+    margin-top: 10px;
+    background: var(--addButtonBackground);
+    color: var(--addButtonColor);
+    border: var(--addButtonBorder);
+    padding: 8px 50px;
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 12px;
+
+    svg {
+      fill: var(--addButtonColor);
+      -webkit-transform: scale(-0.7, 0.7);
+      -moz-transform: scale(-0.7, 0.7);
+      -o-transform: scale-(0.7, 0.7);
+      transform: scale(-0.7, 0.7);
+    }
+  }
+}

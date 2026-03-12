@@ -1,0 +1,302 @@
+@if (modalService.isOpen()) {
+<div class="frame" (click)="modalService.close()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="top">
+      @if (modalService.mode() === 'output-merging') {
+      <div class="heading">Output Merging</div>
+      } @if (modalService.mode() === 'legend' || modalService.mode() === 'blocksLegend') {
+      <div class="heading">Graph Legend</div>
+      } @if (modalService.mode() === 'edit-label') {
+      <div class="heading">Edit Label</div>
+      } @if (modalService.mode() === 'export-format') {
+      <div class="heading">Export Graph</div>
+      }
+
+      <div class="close" (click)="modalService.close()">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          height="24px"
+          viewBox="0 -960 960 960"
+          width="24px"
+          fill="#e8eaed"
+        >
+          <path
+            d="M480-424 363.33-307q-11.07 11-28.17 11T307-307q-11-11-11-28t11-28l117-117-117-115.67q-11-11.07-11-28.17T307-652q11-11 28-11t28 11l117 117 115.67-117q11.07-11 28.17-11T652-652q12 12 12 28.5T652-596L535-480l117 116.67q11 11.07 11 28.17T652-307q-12 12-28.5 12T596-307L480-424Z"
+          />
+        </svg>
+      </div>
+    </div>
+
+    @if (modalService.mode() === 'edit-label') {
+    <div class="content edit-label-content">
+      <div class="input-group">
+        <input
+          type="text"
+          [ngModel]="labelText()"
+          (ngModelChange)="labelText.set($event)"
+          placeholder="Enter label..."
+          (keydown.enter)="saveLabel()"
+          autofocus
+        />
+      </div>
+
+      <div class="input-group">
+        <div class="color-presets">
+          @for (color of presetColors; track color) {
+          <div
+            class="color-circle"
+            [style.background-color]="color"
+            [style.color]="color"
+            [class.selected]="labelColor() === color && !isCustomColor()"
+            (click)="selectPreset(color)"
+          ></div>
+          }
+
+          <div
+            class="color-circle custom-circle"
+            [class.selected]="isCustomColor()"
+            [style.color]="labelColor()"
+            [style.background-color]="isCustomColor() ? labelColor() : 'transparent'"
+            title="Custom Color"
+          >
+            <svg
+              [style.fill]="isCustomColor() ? getContrastColor(labelColor()) : 'var(--textLighter)'"
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+            >
+              <path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z" />
+            </svg>
+            <input
+              type="color"
+              [ngModel]="labelColor()"
+              (ngModelChange)="onCustomColorChange($event)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-delete" (click)="deleteLabel()">Delete</button>
+        <button class="btn-cancel" (click)="modalService.close()">Cancel</button>
+        <button class="btn-save" (click)="saveLabel()">Save</button>
+      </div>
+    </div>
+    } @if (modalService.mode() === 'export-format') {
+    <div class="content">
+      <p>Select the format you want to export the current graph data to:</p>
+      <div class="actions vertical-actions">
+        <button class="btn-save" (click)="selectExportFormat('gexf')">
+          <strong>GEXF</strong> (for use in Gephi)
+        </button>
+        <button class="btn-save" (click)="selectExportFormat('csv')">
+          <strong>CSV</strong> (for Nodes & Edges)
+        </button>
+        <button class="btn-save" (click)="selectExportFormat('json')">
+          <strong>JSON</strong> (to save/restore graph state)
+        </button>
+      </div>
+    </div>
+    } @if (modalService.mode() === 'output-merging') {
+    <div class="content">
+      <span>
+        This tool detects <b>Output Merging</b> by tracking a specific list of
+        <b>Poisoned Outputs</b>.
+      </span>
+      <span>
+        In Monero, every transaction creates outputs. To spend these, the owner must use them as
+        inputs in a new transaction, hiding them among random "decoys" selected from the blockchain.
+      </span>
+      <span>
+        Since decoys are chosen randomly from the entire blockchain history, the odds of a stranger
+        accidentally selecting multiple outputs from your specific "poisoned" list to use as decoys
+        in the same transaction are near zero.
+      </span>
+      <span>
+        Therefore, if the tool observes a single transaction referencing multiple poisoned outputs
+        simultaneously, it identifies that transaction as a <b>Merge</b>,confirming with high
+        confidence that the entity controlling those funds is consolidating them.
+      </span>
+    </div>
+
+    <div class="heading">How the tool works:</div>
+
+    <div class="content">
+      <span>
+        1. <b>Initialization:</b> For every initial transaction provided, the tool extracts all its
+        outputs. These are marked as the initial set of "Poisoned Outputs."
+      </span>
+      <span>
+        2. <b>Scanning:</b> The tool retrieves every future transaction on the blockchain that
+        references any of these poisoned outputs as a ring member.
+      </span>
+      <span>
+        3. <b>Intersection Detection:</b> It checks for overlaps. If a specific transaction hash
+        appears in the lists of multiple <i>different</i> poisoned outputs, it is flagged as an
+        <b>Output Merging Transaction</b>.
+      </span>
+      <span>
+        4. <b>Recursive Tracing:</b> The tool repeats this process recursively. The
+        <i>new</i> outputs created by the detected Merging Transaction are treated as "poisoned,"
+        and the scan begins again for the next "round" (or hop).
+      </span>
+      <span>
+        5. <b>Visualization:</b> As soon as no further intersections are found, the process stops.
+        The result displays the transaction hashes for each round, visualizing the flow of funds
+        from the initial transactions (left) to the final consolidated outputs (right).
+      </span>
+    </div>
+    } @if (modalService.mode() === 'legend') {
+    <div class="legend-content">
+      <div class="legend-section">
+        <h4>Nodes</h4>
+        <div class="legend-item">
+          <div class="symbol tx-rect"></div>
+          <span><strong>Transaction:</strong> The central transaction node.</span>
+        </div>
+        @if (modalService.data()?.graphMode === 'legacy') {
+        <div class="legend-item">
+          <div class="symbol input-shape"></div>
+          <span><strong>Input:</strong> Click to expand/collapse ring members.</span>
+        </div>
+        }
+        <div class="legend-item">
+          <div class="symbol output-shape"></div>
+          <span><strong>Output (Stealth Address):</strong> Click to view Decoy Map.</span>
+        </div>
+      </div>
+
+      <div class="legend-section">
+        <h4>Ring Members</h4>
+        @if (modalService.data()?.hasAge0) {
+        <div class="legend-item">
+          <div class="symbol circle-grey-age0"></div>
+          <span
+            ><strong>Mempool:</strong> As soon as this transaction is included in a block, the color
+            of this ring member will represent the age of its parent transactions.</span
+          >
+        </div>
+        }
+        <div class="legend-item">
+          <div class="symbol circle-grey"></div>
+          <span
+            ><strong>Standard:</strong> A decoy or real input candidate. The bigger the node, the
+            higher is the usage count of that output as a decoy across the blockchain. The further
+            away the node is from the outer cirlces center, the older its parent transaction
+            is.</span
+          >
+        </div>
+        <div class="legend-item">
+          <div class="symbol circle-yellow"></div>
+          <span><strong>Recent:</strong> < 30 days old.</span>
+        </div>
+        <div class="legend-item">
+          <div class="symbol circle-orange"></div>
+          <span><strong>Very Recent:</strong> < 48 hours old.</span>
+        </div>
+
+        <div class="legend-item">
+          <div class="symbol circle-green"></div>
+          <span
+            ><strong>Linked:</strong> Connection to the ring members parent transaction. The green
+            output is the green ring member used as a decoy</span
+          >
+        </div>
+
+        <div class="legend-item">
+          <div class="symbol circle-black"></div>
+          <span
+            ><strong>Shared Parent:</strong> Violet colored ring members share the same parent
+            transaction.</span
+          >
+        </div>
+        <div class="legend-item">
+          <div class="symbol circle-blue"></div>
+          <span
+            ><strong>10-Block Bug:</strong> If the transaction happened between April 2019 and April
+            2023, there is a >99% chance this is the real spend.</span
+          >
+        </div>
+        <div class="legend-item">
+          <div class="symbol circle-darkblue"></div>
+          <span
+            ><strong>Coinbase:</strong> The parent transaction of this ring member is a coinbase
+            transaction, which makes it highly likely to be a decoy.</span
+          >
+        </div>
+        <div class="legend-item">
+          <div class="symbol circle-red"></div>
+          <span
+            ><strong>Unspendable Decoy:</strong> This output is one of the unspendable outputs on
+            the blockchain, and is therefore guaranteed to be a decoy.</span
+          >
+        </div>
+        @if (clipboardService.mode() === 'advanced' && hasClipboardData()) {
+        <div class="legend-item">
+          <div class="symbol circle-pink"></div>
+          <span
+            ><strong>Suspicious Parent:</strong> The parent transaction that produced this output is
+            contained within a suspicious group in the sidebar. (Advanced mode only)</span
+          >
+        </div>
+        }
+      </div>
+
+      <div class="legend-section">
+        <h4>Interactions</h4>
+        <ul>
+          <li><strong>Scroll:</strong> Zoom in/out.</li>
+          <li><strong>Drag:</strong> Pan the view.</li>
+          <li>
+            <strong>Click Ring Member:</strong> Loads the parent transaction that created this
+            output.
+          </li>
+          @if (modalService.data()?.graphMode === 'legacy') {
+          <li><strong>Click Input:</strong> Expand/Collapse ring members for this input.</li>
+          <li><strong>Click Transaction:</strong> Expand/Collapse ALL inputs.</li>
+          }
+          <li><strong>Right-Click Transaction:</strong> Navigate to transaction page.</li>
+        </ul>
+      </div>
+    </div>
+    } @if (modalService.mode() === 'blocksLegend') {
+    <div class="legend-content">
+      <div class="legend-section">
+        <h4>Nodes</h4>
+        <div class="legend-item">
+          <div class="symbol square"></div>
+          <span
+            ><strong>Block:</strong> Represents a Block. Under each block we see its height and the
+            number of transactions within that block.<br />
+            The bigger a block, the more transactions it contains.<br />
+            The deeper its orange coloring is, the higher the total block reward was (comapred to
+            the other 24 blocks in the graph).</span
+          >
+        </div>
+      </div>
+      <div class="legend-section">
+        <h4>Edges</h4>
+        <div class="legend-item">
+          <div class="symbol edge-green"></div>
+          <span
+            >The longer an edge between 2 blocks, the longer the time difference was. In the middle
+            of each edge a label specifies the exact time between the 2 adjacent blocks.<br />
+            The target block time in Monero is 2 minutes. A green edge shows a block time similar to
+            the target. Red edges show a way higher or lower block time.</span
+          >
+        </div>
+      </div>
+
+      <div class="legend-section">
+        <h4>Interactions</h4>
+        <ul>
+          <li><strong>Scroll/Drag:</strong> Move right/left along the chain of blocks.</li>
+          <li><strong>Click Block:</strong> Navigate to its block page.</li>
+        </ul>
+      </div>
+    </div>
+    }
+  </div>
+</div>
+}

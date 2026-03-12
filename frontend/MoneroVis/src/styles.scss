@@ -1,0 +1,333 @@
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wght@6..144,-10..0,1..1000&family=Inter+Tight:ital,wght@0,100..900;1,100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: initial;
+  background-color: var(--background);
+
+  ::-moz-selection {
+    background: var(--txHover);
+  }
+
+  ::selection {
+    background: var(--txHover);
+  }
+}
+
+[data-theme='light'] {
+  --background: #f8f8f7;
+  --text: #303030;
+  --textLighter: #aaaaaa;
+  --pathActive: #ff6914;
+  --skeleton: #f5f5f5;
+  --fontWeight: 480;
+  --fontWeightTxHeader: 500;
+  --viewAllBackground: #f3f3f3;
+  --viewAllText: #4c4c4c;
+  --viewAllBorder: 1px solid #d9d9d9c9;
+
+  //Block
+  --feeStepMarkerBackground: #0000001f;
+  --feeStepLabelColor: #ffffff;
+  --feeStepLabelBackground: rgba(0, 0, 0, 1);
+  --feeStepMarkerActiveBackground: black;
+  --blockNavigationBackground: #edeae6;
+  --blockNavigationHoverBackground: #dedad5;
+  --txContainerHeader: #999;
+  --txHover: rgba(223, 86, 10, 0.11);
+
+  //Blocks
+  --paginationButtonBorder: #f97e1375;
+  --paginationButtonBackground: #ffdbbc;
+  --paginationButtonText: #f97e13;
+
+  //Transaction
+  --coinbaseColor: #3d9df6;
+  --coinbaseBackground: #e9f4ff;
+  --coinbaseBorder: 1px solid #d2e8fd;
+  --confirmedColor: green;
+  --confirmedBackground: #e2f2e2;
+  --confirmedBorder: 1px solid #c2e5c2;
+  --confirmingColor: #d59218;
+  --confirmingBackground: #fff2da;
+  --confirmingBorder: 1px solid #ffe3b1;
+  --outputBorderBottomMobile: 1px solid #eee;
+  --outputMobileColor: gray;
+
+  //Transaction Graph
+  --txGraphBorder: 1px solid #ddddddad;
+  --txLegendHeaderBorder: 1px solid #eee;
+  --graphNodeFill: #ffffff;
+  --graphNodeStroke: #e0e0e0;
+  --graphText: #555555;
+  --graphRingBg: #e6e6e650;
+  --graphRingBgExpanded: rgba(89, 161, 79, 0.25);
+  --graphEdge: #d0d0d0;
+  --graphEdgeBridge: #59a14f;
+  --graphSegmentDefault: #fccba0;
+  --graphSegmentExpanded: #59a14f;
+  --graphSegmentCoinbase: rgb(17, 82, 174);
+  --graphSegmentDuplicate: #bf8bff;
+  --graphSegmentDanger: rgb(249 0 0);
+  --graphSegmentAge0: #dbdbdb;
+  --graphSegmentAge1: #82b8ff;
+  --graphSegmentAge2: #f97e13;
+  --graphSegmentAge3: #faa459;
+  // --graphSegmentAge2: #555555;
+  // --graphSegmentAge3: #c1c1c1;
+  --graphCoinbaseFill: #e9f4ff;
+  --graphCoinbaseStroke: #d2e8fd;
+
+  //Search
+  --searchBackground: #ffffff;
+  --searchBoxShadow: 0 0px 20px rgba(0, 0, 0, 0.02);
+  --searchBorder: 1px solid #f2f2f2;
+  --searchFocusBoxShadow: 0 0px 20px rgba(0, 0, 0, 0.12);
+  --searchPlaceholder: #cdcdcd;
+  --expandArrowSvgFill: #d8d8d8;
+
+  //Sidebar
+  --sidebarBackground: #f8f8f7;
+
+  //Clipboard
+  --modeSwitchBackground: #f1f0ef;
+  --modeSwitchBackgroundActive: #e9e8e7;
+  --modeSwitchButtonActive: #ffffff;
+  --modeSwitchButtonText: #666;
+  --addButtonBackground: #fcebdb;
+  --addButtonColor: #ff6914;
+  --addButtonBorder: 1px solid #ffd2b8c9;
+  --groupHeaderBackground: #f1f0ef;
+  --groupTitleColor: inhertit !important;
+  --listItemBorderBottom: 1px solid var(--sidebarBackground);
+  --tabBorder: #dcdcdc;
+  --tabHover: #f1f0ef;
+
+  //Modal
+  --modalBackground: #ffffff;
+  --modalBorder: 1.5px solid #aaaaaa;
+  --deleteButtonBackground: #ffeeee;
+  --deleteButtonColor: #ff0808;
+  --deleteButtonBorder: 1px solid #ff080820;
+  --saveButtonBackground: #c9f5c3;
+  --saveButtonColor: #1a5d11;
+  --saveButtonBorder: 1px solid #1a5d1120;
+  --closeButtonBackground: #ebebeb;
+
+  //Mempool
+  --mempoolFrameBackground: #ffffff;
+  --mempoolFillLayerTint: rgba(242, 104, 34, 0.02);
+  --mempoolFillLayerBorder: #f26822;
+  --mempoolEmptyLayerBackground: #fafafa;
+  --mempoolSkeletonColor: 168, 166, 162;
+  --mempoolRectNodeStroke: #ffffff;
+  --mempoolRectNodeHoverStroke: #333333;
+  --mempoolGhostNodeStroke: #f0f0f0;
+  --mempoolGhostNodeFill: #e0e0e0;
+  --mempoolWaterlineLabelColor: #f26822;
+  --mempoolWaterlineLabelBackground: #ffffff;
+  --mempoolWaterlineOverflowColor: #d32f2f;
+  --mempoolLimitLabelColor: #aaaaaa;
+  --mempoolLimitLabelBackground: rgba(255, 255, 255, 0.8);
+  --mempoolTooltipBackground: rgba(255, 255, 255, 0.98);
+  --mempoolTooltipBorder: #eeeeee;
+  --mempoolTooltipText: #333333;
+  --mempoolTooltipShadow: rgba(0, 0, 0, 0.15);
+  --mempoolFillColor: #f26822;
+  --wsBackground: #f1f1f1;
+
+  //Footer
+  --footerText: #888888;
+}
+
+[data-theme='dark'] {
+  --background: #191919;
+  --text: #e3e3e3;
+  --textLighter: #aaaaaa;
+  --pathActive: #ff6914;
+  --skeleton: #313131;
+  --fontWeight: 420;
+  --fontWeightTxHeader: 450;
+  --viewAllBackground: #363636;
+  --viewAllText: #dfdfdf;
+  --viewAllBorder: 1px solid #606060c9;
+
+  //Block
+  --feeStepMarkerBackground: #0000001f;
+  --feeStepLabelColor: #ffffff;
+  --feeStepLabelBackground: rgba(0, 0, 0, 1);
+  --feeStepMarkerActiveBackground: black;
+  --blockNavigationBackground: #373737;
+  --blockNavigationHoverBackground: #464646;
+  --txContainerHeader: #999;
+  --txHover: rgba(223, 86, 10, 0.25);
+
+  //Blocks
+  --paginationButtonBorder: #f97e1375;
+  --paginationButtonBackground: #f5710033;
+  --paginationButtonText: #ff7700;
+
+  //Transaction
+  --coinbaseColor: #e9f4ff;
+  --coinbaseBackground: #3d9df6;
+  --coinbaseBorder: 1px solid #3d9df6;
+  --confirmedColor: #e2f2e2;
+  --confirmedBackground: green;
+  --confirmedBorder: 1px solid green;
+  --confirmingColor: #fff2da;
+  --confirmingBackground: #d59218;
+  --confirmingBorder: 1px solid #d59218;
+  --outputBorderBottomMobile: 1px solid #212121;
+  --outputMobileColor: gray;
+
+  //Transaction Graph
+  --txGraphBorder: 1px solid #303030;
+  --txLegendHeaderBorder: 1px solid #464646;
+  --graphNodeFill: #252525;
+  --graphNodeStroke: #555555;
+  --graphText: #cccccc;
+  --graphRingBg: #25252565;
+  --graphRingBgExpanded: rgba(89, 161, 79, 0.15);
+  --graphEdge: #555555;
+  --graphEdgeBridge: #59a14f;
+  --graphSegmentDefault: #fccba0;
+  --graphSegmentExpanded: #59a14f;
+  --graphSegmentCoinbase: rgb(17, 82, 174);
+  --graphSegmentDuplicate: #bf8bff;
+  --graphSegmentDanger: rgb(249 0 0);
+  --graphSegmentAge0: #353535;
+  --graphSegmentAge1: #82b8ffff;
+  --graphSegmentAge2: #f97e13;
+  --graphSegmentAge3: #faa459;
+  --graphCoinbaseFill: #3d9df6;
+  --graphCoinbaseStroke: #3d9df6;
+
+  //Search
+  //--searchBackground: #313131;
+  --searchBackground: #252525;
+  --searchBoxShadow: 0 0px 20px rgba(0, 0, 0, 0.02);
+  --searchBorder: 1px solid #353535;
+  --searchFocusBoxShadow: box-shadow: 0 0px 20px rgba(0, 0, 0, 0.12);
+  --searchPlaceholder: #6d6d6d;
+  --expandArrowSvgFill: #6d6d6d;
+
+  //Sidebar
+  --sidebarBackground: #1e1e1e;
+
+  //Clipboard
+  --modeSwitchBackground: #2d2d2d;
+  --modeSwitchBackgroundActive: #363636;
+  --modeSwitchButtonActive: #4b4b4b;
+  --modeSwitchButtonText: #e6e6e6;
+  --addButtonBackground: #ff6914;
+  --addButtonColor: #fcebdb;
+  --addButtonBorder: 1px solid #ff6914;
+  --groupHeaderBackground: #313131;
+  --groupTitleColor: white !important;
+  --listItemBorderBottom: 1px solid var(--sidebarBackground);
+  --tabBorder: #434343;
+  --tabHover: #292929;
+
+  //Modal
+  --modalBackground: #1c1c1c;
+  --modalBorder: 1.5px solid #333333;
+  --deleteButtonBackground: #552020;
+  --deleteButtonColor: #ff7676;
+  --deleteButtonBorder: 1px solid #ff767620;
+  --saveButtonBackground: #59a14f;
+  --saveButtonColor: white;
+  --saveButtonBorder: 1px solid #59a14f;
+  --closeButtonBackground: #303030;
+
+  //Mempool
+  --mempoolFrameBackground: #252525;
+  --mempoolFillLayerTint: rgba(242, 104, 34, 0.1);
+  --mempoolFillLayerBorder: #f26822;
+  --mempoolEmptyLayerBackground: #222222;
+  --mempoolSkeletonColor: 80, 80, 80;
+  --mempoolRectNodeStroke: #252525;
+  --mempoolRectNodeHoverStroke: #ffffff;
+  --mempoolGhostNodeStroke: #272727;
+  --mempoolGhostNodeFill: #353535;
+  --mempoolWaterlineLabelColor: #f26822;
+  --mempoolWaterlineLabelBackground: #252525;
+  --mempoolWaterlineOverflowColor: #ef5350;
+  --mempoolLimitLabelColor: #c3c3c3;
+  --mempoolLimitLabelBackground: rgb(29 29 29);
+  --mempoolTooltipBackground: rgba(30, 30, 30, 0.98);
+  --mempoolTooltipBorder: #444444;
+  --mempoolTooltipText: #e3e3e3;
+  --mempoolTooltipShadow: rgba(0, 0, 0, 0.5);
+  --mempoolFillColor: #f26822;
+  --wsBackground: #2a2a2a;
+
+  //Footer
+  --footerText: #b3b3b3;
+}
+
+#node-tooltip {
+  position: fixed;
+  background: rgba(30, 30, 30, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 10px 15px;
+  color: #fff;
+  font-family: 'Google Sans Code', monospace;
+  font-size: 12px;
+  z-index: 100000;
+  transform: translate(-50%, -160%);
+  pointer-events: none;
+  text-align: left;
+  opacity: 0;
+  transition: opacity 0.1s ease-out;
+}
+
+#node-tooltip.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+#node-tooltip h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+#node-tooltip .tooltip-id {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #bbbbbb;
+  word-break: break-all;
+  max-width: 300px;
+}
+
+#node-tooltip a {
+  color: #50a0f0;
+  text-decoration: none;
+  font-weight: bold;
+  font-size: 11px;
+}
+
+#node-tooltip a:hover {
+  text-decoration: underline;
+}
+
+:root {
+  --frameWidth: 1200px;
+}
+
+@media only screen and (max-width: 1250px) {
+  :root {
+    --frameWidth: 800px;
+  }
+}
+
+@media only screen and (max-width: 850px) {
+  :root {
+    --frameWidth: 95vw;
+  }
+}

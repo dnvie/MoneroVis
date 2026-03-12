@@ -1,0 +1,298 @@
+<div class="home-container">
+  <div class="frame">
+    <div class="pathContainer">
+      <div class="path skeletonPath hiddenMobile">
+        <div class="lighter">
+          <span style="cursor: not-allowed; opacity: 0.4">MoneroVis › </span>
+          <span class="pathActive">Home</span>
+        </div>
+      </div>
+      <div class="path skeletonPath">
+        @if (isLoading()) {
+        <div class="skeletonPathBlock skeleton"></div>
+        }@else {
+        <div class="lighter">
+          <span class="pathLink" (click)="navigateToBlocks()">All Blocks</span>
+        </div>
+        }
+      </div>
+    </div>
+    @if (isLoading()) {
+    <div class="mempool">
+      <div class="heading">Mempool</div>
+      <div class="skeleton skeletonSubheading"></div>
+      <div class="loaderContainer skeleton">
+        <app-loader></app-loader>
+      </div>
+
+      <div class="mempool">
+        <div class="desktop">
+          <div class="skeletonInput input">
+            <div class="skeletonMempool skeleton"></div>
+          </div>
+        </div>
+        <div class="mobile">
+          <div class="skeletonInput input">
+            <div class="skeletonMempool skeleton"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="blocks">
+        <div class="heading2">Latest Blocks</div>
+        <div class="desktop">
+          <div class="skeletonInput input">
+            <div class="skeletonMempool skeleton"></div>
+          </div>
+        </div>
+        <div class="mobile">
+          <div class="skeletonInput input">
+            <div class="skeletonMempool skeleton"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    } @else if (homeData) {
+    <div class="mempool">
+      <div class="heading">Mempool</div>
+      <div class="mempoolContainer">
+        <app-mempool
+          [highlightedTxHash]="hoveredTxHash()"
+          [mempoolTxs]="homeData!.mempool"
+          [blockLimit]="homeData!.blockWeightLimit"
+          [wsConnected]="wsConnected()"
+          (hoverTx)="setHoveredTx($event)"
+          (txClick)="navigateToTx($event)"
+        ></app-mempool>
+      </div>
+    </div>
+
+    @if (homeData!.mempool.length == 0) {
+    <div class="mempool">
+      <div class="mempoolEmpty">
+        <div class="mempoolEmptyText">The mempool is currently empty.</div>
+      </div>
+    </div>
+    } @else {
+    <div class="mempool">
+      <div class="desktop" style="margin-top: 25px">
+        <div class="input" style="margin-left: 7px">
+          <div class="ring_member mempool_member header">
+            <div>Hash:</div>
+            <div>Fee:</div>
+            <div>Size:</div>
+            <div>In/Out:</div>
+          </div>
+          @for (tx of homeData!.mempool | slice:0:displayLimit(); track tx; let count = $index) {
+          <div
+            class="ring_member mempool_member"
+            (click)="navigateToTx(tx.hash)"
+            [class.highlighted]="tx.hash === hoveredTxHash()"
+            [class.flash-new]="tx.isNew"
+            (mouseenter)="setHoveredTx(tx.hash)"
+            (mouseleave)="setHoveredTx(null)"
+          >
+            <div
+              class="circle"
+              [style.opacity]="getOpacity(tx)"
+              [style.background-color]="'var(--mempoolFillColor)'"
+            ></div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Hash: </span>
+              <span class="mono">{{ tx.hash }}</span>
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Fee: </span>
+              {{ tx.fee.toFixed(8) }}<span class="lighterText"> ɱ</span>
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Size: </span>{{ tx.size.toFixed(3) }}
+              <span class="lighterText"> kB</span>
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">In/Out: </span>{{ tx.inputs }}<span
+                class="lighterText"
+                >/</span
+              >{{tx.outputs}}
+            </div>
+          </div>
+          } @if (homeData!.mempool.length > displayLimit()) {
+          <div class="ring_member mempool_member" style="margin-top: 5px" (click)="increaseLimit()">
+            <div class="mobileFlexOutput">
+              <span class="showMoreText">
+                Show remaining {{ homeData!.mempool.length - displayLimit() }}</span
+              >
+            </div>
+          </div>
+          }
+        </div>
+      </div>
+
+      <div class="mobile">
+        @for (tx of homeData!.mempool | slice:0:displayLimit(); track tx; let count = $index) {
+        <div
+          class="ring_member mempool_member"
+          (click)="navigateToTx(tx.hash)"
+          [class.flash-new]="tx.isNew"
+        >
+          <div class="mobileFlexOutputHash">
+            <span class="lighterTextMobile">Hash: &nbsp;</span>
+            <span class="mono">{{ tx.hash }}</span>
+          </div>
+          <div class="mobileFlexOutput">
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Fee: &nbsp;<span class="mobileSpaces">&nbsp;&nbsp;</span></span
+              >
+              <span>{{ tx.fee }} ɱ</span>
+            </div>
+
+            <div class="mobileFlexOutput2 mobileFlexOutputHidden">
+              <span class="lighterTextMobile">Fee:&nbsp;</span>{{ tx.fee }} ɱ
+              <span class="lighter dotSeparator2">&nbsp;∙&nbsp;</span>
+              <span class="lighterTextMobile">Size:&nbsp;</span>{{ tx.size }} kB
+              <span class="lighter dotSeparator2">&nbsp;∙&nbsp;</span>
+              <span class="lighterTextMobile">In/Out:&nbsp;</span>{{ tx.inputs }}/{{ tx.outputs }}
+            </div>
+
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Size: &nbsp;<span class="mobileSpaces"
+                  >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                ></span
+              >{{ tx.size }} kB
+            </div>
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >In/Out: &nbsp;<span class="mobileSpaces"
+                  >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                ></span
+              >{{ tx.inputs }}/{{ tx.outputs }}
+            </div>
+          </div>
+        </div>
+        } @if (homeData!.mempool.length > displayLimit()) {
+        <div class="load-more-container">
+          <button class="viewAllButtonNew" (click)="increaseLimit()">
+            Show remaining {{ homeData!.mempool.length - displayLimit() }}
+          </button>
+        </div>
+        }
+      </div>
+    </div>
+    }
+
+    <div class="blocks">
+      <div class="heading2" (click)="navigateToBlocks()">Latest Blocks</div>
+      <div class="desktop">
+        <div class="input">
+          <div class="ring_member header">
+            <div>Height:</div>
+            <div>Hash:</div>
+            <div>Transactions:</div>
+            <div>Block Reward:</div>
+            <div>Age:</div>
+          </div>
+          @for (block of homeData!.blocks; track block.hash; let isLast = $last) {
+          <div
+            class="ring_member"
+            (click)="navigateToBlock(block.height)"
+            [class.flash-new]="block.isNew"
+          >
+            <div class="mobileFlexOutput" (click)="navigateToBlock(block.height)">
+              <span class="lighterTextMobile">Height: </span>
+              <span>{{ block.height }}</span>
+            </div>
+            <div class="mobileFlexOutput" (click)="navigateToBlock(block.height)">
+              <span class="lighterTextMobile">Hash: </span>
+              <span class="mono">{{ block.hash }}</span>
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Txs: </span>{{ block.txCount }}
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Reward: </span>{{ block.reward.toFixed(8) }}<span
+                class="lighterText"
+              >
+                ɱ</span
+              >
+            </div>
+            <div class="mobileFlexOutput">
+              <span class="lighterTextMobile">Age: </span>
+              <span>{{ block.relativeTime }}</span>
+            </div>
+          </div>
+          }
+        </div>
+      </div>
+
+      <div class="mobile">
+        @for (block of homeData!.blocks; track block.hash; let isLast = $last) {
+        <div
+          class="ring_member"
+          (click)="navigateToBlock(block.height)"
+          [class.flash-new]="block.isNew"
+        >
+          <div class="mobileFlexOutputHash" (click)="navigateToBlock(block.height)">
+            <span class="lighterTextMobile">Hash: &nbsp;</span>
+            <span class="mono">{{ block.hash }}</span>
+          </div>
+          <div class="mobileFlexOutput" (click)="navigateToBlock(block.height)">
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Height: &nbsp;<span class="mobileSpaces">&nbsp;&nbsp;</span></span
+              >
+              <span>{{ block.height }}</span>
+            </div>
+
+            <div class="mobileFlexOutput2 mobileFlexOutputHidden">
+              <span class="lighterTextMobile">Height: &nbsp; </span>
+              <span>{{ block.height }}</span>
+              <span class="lighter dotSeparator2">&nbsp;∙&nbsp;</span>
+              <span class="lighterTextMobile">{{ block.txCount }} Txs</span>
+              <span class="lighter dotSeparator2">&nbsp;∙&nbsp;</span>
+              <span class="lighterTextMobile">{{ block.relativeTime }}</span>
+            </div>
+
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Txs: &nbsp;<span class="mobileSpaces"
+                  >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                ></span
+              >{{ block.txCount }}
+            </div>
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile">Reward: &nbsp;<span class="mobileSpaces"></span></span
+              >{{ block.reward }}ɱ
+            </div>
+            <span class="lighter dotSeparator">&nbsp;&nbsp;&nbsp;∙&nbsp;&nbsp;&nbsp;</span>
+            <div class="mobileFlexOutput2 hiddenMobile">
+              <span class="lighterTextMobile"
+                >Age: &nbsp;<span class="mobileSpaces"
+                  >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                ></span
+              >
+              <span>{{ block.relativeTime }}</span>
+            </div>
+          </div>
+        </div>
+        }
+        <div class="load-more-container">
+          <div
+            class="viewAllButtonNew viewAllBlocksButtonMobile"
+            style="margin-bottom: 20px"
+            (click)="navigateToBlocks()"
+          >
+            View All Blocks
+          </div>
+        </div>
+      </div>
+    </div>
+
+    }
+  </div>
+</div>

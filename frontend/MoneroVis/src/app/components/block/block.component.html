@@ -1,0 +1,278 @@
+<div id="frame">
+  @if (isLoading()) {
+    <div class="container">
+      <div class="pathContainer">
+        <div class="path skeletonPath">
+          <div class="lighter">
+            <span><a class="lighter" (click)="navigateToHome()">Home</a> › </span>Blocks ›
+            <span class="pathActive">Block</span>
+          </div>
+          <div class="skeletonPathBlock skeleton"></div>
+        </div>
+      </div>
+      <div class="subContainers">
+        <div class="subContainer">
+          <div class="infoContainer">
+            <div class="skeletonInfoContainer">
+              <div class="height infoElement" style="letter-spacing: -0.01em !important">
+                Block:
+              </div>
+              <div class="skeletonHeight skeleton"></div>
+            </div>
+            <div class="skeletonInfoContainer">
+              <div class="hash infoElement">Hash:</div>
+              <div class="skeletonInfo skeletonHash skeleton"></div>
+            </div>
+            <div class="skeletonInfoContainer">
+              <div class="timestamp infoElement">Timestamp:</div>
+              <div class="skeletonInfo skeletonTimestamp skeleton"></div>
+            </div>
+            <div class="skeletonInfoContainer">
+              <div class="txs infoElement">Number of Transactions:</div>
+              <div class="skeletonInfo skeletonTxs skeleton"></div>
+            </div>
+            <div class="skeletonInfoContainer">
+              <div class="blocksize infoElement">Block Size:</div>
+              <div class="skeletonInfo skeletonSize skeleton"></div>
+            </div>
+            <div class="skeletonInfoContainer">
+              <div class="fees infoElement">Total Fees:</div>
+              <div class="skeletonInfo skeletonFees skeleton"></div>
+            </div>
+            <div class="skeletonInfoContainer">
+              <div class="nonce infoElement">Nonce:</div>
+              <div class="skeletonInfo skeletonNonce skeleton"></div>
+            </div>
+            <div class="legendGradientContainer">
+              <div class="gradientLabelsContainer">
+                <div class="gradientLabelSkeleton skeleton"></div>
+                <div class="gradientLabelSkeleton skeleton"></div>
+              </div>
+              <div class="gradientSkeleton skeleton"></div>
+            </div>
+          </div>
+          <div class="navigationContainer">
+            <div class="navLeft navigation">
+              <div class="blockNavigation skeleton"></div>
+              <div class="blockNavigationText">‹ Previous</div>
+            </div>
+            <div class="navRight navigation">
+              <div class="blockNavigationText">Next ›</div>
+              <div class="blockNavigation skeleton"></div>
+            </div>
+          </div>
+        </div>
+        <div class="subContainer" id="leftContainer">
+          <div id="treeMap">
+            <div class="treeMapLoader skeleton">
+              <app-loader></app-loader>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container txFrame">
+      <div class="txHeader">Coinbase Transaction:</div>
+      <div class="txContainer coinbaseContainer">
+        <div class="coinbaseSkeleton skeleton"></div>
+      </div>
+      <div class="txHeader txHeaderSkeleton">
+        <div>Transactions:</div>
+        <div class="txHeaderSkeletonNumber skeleton"></div>
+      </div>
+      <div class="txContainer">
+        @for (item of getItemsArray(10); track item) {
+          <div class="txSkeleton skeleton" class="txSkeleton{{ item % 5 }}"></div>
+        }
+      </div>
+    </div>
+  } @else if (block(); as b) {
+    <div class="container">
+      <div class="pathContainer">
+        <div class="path">
+          <span class="lighter"><a class="lighter" (click)="navigateToHome()">Home</a> › </span
+          ><a class="lighter" (click)="navigateToBlocks()"> Blocks</a
+          ><span class="lighter"> › </span>
+          <span class="pathActive">Block {{ b.height }}</span>
+        </div>
+      </div>
+      <div class="subContainers">
+        <div class="subContainer">
+          <div class="infoContainer">
+            <div class="height infoElement" style="letter-spacing: -0.01em !important">
+              Block: {{ b.height }}
+            </div>
+            <div class="hash infoElement">
+              Hash: <span class="lighter mono2">{{ b.hash }}</span>
+            </div>
+            <div class="timestamp infoElement">
+              Timestamp: <span class="lighter">{{ b.timestamp }} ({{ b.relativeTime }})</span>
+            </div>
+            <div class="txs infoElement">
+              Number of Transactions:
+              <span class="lighter">{{ b.transactions?.length ?? 0 }}</span>
+            </div>
+            <div class="blocksize infoElement">
+              Block Size: <span class="lighter">{{ b.blockSize.toFixed(4) }} kB</span>
+            </div>
+            <div class="fees infoElement">
+              Total Fees: <span class="lighter">{{ b.totalFees }} ɱ</span>
+            </div>
+            <div class="nonce infoElement">
+              Nonce:
+              <span class="lighter"> {{ b.nonce }}</span>
+            </div>
+            <div
+              class="legendGradientContainer"
+              (mouseenter)="onGradientEnter()"
+              (mouseleave)="onGradientLeave()"
+            >
+              <div class="gradientLabelsContainer">
+                <div class="gradientLabel">{{ minFee }}<span class="lighterText"> ɱ</span></div>
+                <div class="gradientLabel">{{ maxFee }}<span class="lighterText"> ɱ</span></div>
+              </div>
+
+              <div class="gradient expanded" (mousemove)="onGradientMove($event)">
+                <div class="fee-steps-container">
+                  @for (fee of uniqueFees(); track fee) {
+                    <div
+                      class="fee-step"
+                      [style.left]="calculateStepPosition(fee)"
+                      [class.active]="hoveredFee() === fee"
+                    >
+                      <span class="fee-step-marker"></span>
+
+                      <span class="fee-step-label">{{ fee.toFixed(8) }} ɱ</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="navigationContainer">
+            <div
+              class="navLeft navigation"
+              [class.disabled]="!hasPreviousBlock(b)"
+              (click)="hasPreviousBlock(b) && navigateToBlock(b.height - 1)"
+            >
+              <div class="blockNavigation">
+                @if (hasPreviousBlock(b)) {
+                  {{ b.height - 1 }}
+                }
+              </div>
+              <div class="blockNavigationText">‹ Previous</div>
+            </div>
+            <div
+              class="navRight navigation"
+              [class.disabled]="!hasNextBlock(b)"
+              (click)="hasNextBlock(b) && navigateToBlock(b.height + 1)"
+            >
+              <div class="blockNavigationText">Next ›</div>
+              <div class="blockNavigation">
+                {{ b.height + 1 }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="subContainer" id="leftContainer">
+          <div id="treeMap">
+            <svg id="chart-svg"></svg>
+            <div id="tooltip"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container txFrame">
+      <div class="txHeader">Coinbase Transaction:</div>
+      <div class="txContainer coinbaseContainer">
+        <div class="tx header coinbaseHeader">
+          <div>Hash</div>
+          <div>Outputs</div>
+          <div>Size</div>
+        </div>
+        <div
+          class="tx coinbaseTx"
+          (mouseenter)="onTxEnter(b.minerTx.hash)"
+          (mouseleave)="onTxLeave()"
+          (click)="navigateToTx(b.minerTx.hash)"
+        >
+          <div>
+            <span class="lighterTextMobile">Hash:&nbsp;</span>
+            <span class="mono">{{ b.minerTx.hash }}</span>
+          </div>
+          <div>
+            <span class="lighterTextMobile">Outputs:&nbsp;</span>
+            {{ b.minerTx.outputs }}<span class="lighterText">&nbsp;ɱ</span>
+          </div>
+          <div>
+            <span class="lighterTextMobile">Size:&nbsp;</span>
+            {{ b.minerTx.size.toFixed(4) }} <span class="lighterText">&nbsp;kB</span>
+          </div>
+        </div>
+      </div>
+      @if (b.transactions != null && b.transactions.length == 1) {
+        <div class="txHeader">Transaction: 1</div>
+      } @else if (b.transactions != null && b.transactions.length > 1) {
+        <div class="txHeader">Transactions: {{ b.transactions.length }}</div>
+      } @else {
+        <div class="txHeader">Transactions: 0</div>
+      }
+      <div class="txContainer">
+        @if (b.transactions && b.transactions.length > 0) {
+          <div class="tx header">
+            <div>Hash</div>
+            <div>In/Out</div>
+            <div>Fee</div>
+            <div>Size</div>
+          </div>
+          @for (tx of b.transactions | slice: 0 : displayLimit(); track tx; let count = $index) {
+            <div
+              class="tx"
+              (mouseenter)="onTxEnter(tx.hash)"
+              (mouseleave)="onTxLeave()"
+              (click)="navigateToTx(tx.hash)"
+            >
+              <div class="mobileTxHash">
+                <span class="lighterTextMobile">Hash:&nbsp;</span>
+                <span class="mono">{{ tx.hash }}</span>
+              </div>
+              <div>
+                <span class="lighterTextMobile">In/Out:&nbsp;</span>
+                {{ tx.in }}<span class="lighterText">/</span>{{ tx.out }}
+              </div>
+              <div>
+                <span class="lighterTextMobile">Fee:&nbsp;</span>
+                {{ tx.fee }}<span class="lighterText">&nbsp;ɱ</span>
+              </div>
+              <div>
+                <span class="lighterTextMobile">Tx Size:&nbsp;</span>
+                {{ tx.size.toFixed(4) }} <span class="lighterText">&nbsp;kB</span>
+              </div>
+            </div>
+          }
+          @if (b.transactions.length > displayLimit()) {
+            <div class="desktop">
+              <div class="tx" style="margin-top: 5px" (click)="increaseLimit()">
+                <div class="mobileTxHash">
+                  <span class="showMoreText"
+                    >Show remaining {{ b.transactions.length - displayLimit() }}</span
+                  >
+                </div>
+              </div>
+            </div>
+            <div class="mobile">
+              <div class="load-more-container">
+                <button class="viewAllButtonNew" (click)="increaseLimit()">
+                  Show remaining {{ b.transactions.length - displayLimit() }}
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  } @else if (error()) {
+    <div><p>Could not load block.</p></div>
+  }
+</div>

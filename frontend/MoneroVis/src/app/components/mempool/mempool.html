@@ -1,0 +1,36 @@
+<div class="subtitle">
+  <div class="stats">
+    <span>Txs: <span class="stat-highlight">{{ txCount }}</span></span>
+    <span>Used: <span class="stat-highlight">{{ usedSizeStr }}</span></span>
+    <span>Limit: <span class="stat-highlight">{{ limitSizeStr }}</span></span>
+    <span>
+      Load:
+      <span class="stat-highlight" [style.color]="loadPctColor">{{ loadPctStr }}</span>
+    </span>
+  </div>
+  @if (wsConnected) {
+  <div class="wsIndicator">
+    <div class="circle"></div>
+    Live Updates
+  </div>
+  } @else {
+  <div class="wsIndicator notConnected">
+    <div class="circle"></div>
+    Not Live
+  </div>
+  }
+</div>
+
+<div id="container-frame" #containerFrame>
+  <div class="limit-label">Dynamic Limit: {{ blockLimit/1024 | number: '1.0-1' }} kB</div>
+
+  <div id="fill-layer" #fillLayer>
+    <div class="waterline-label" [class.overflow]="waterlineClass === 'overflow'">
+      {{ waterlineText }}
+    </div>
+  </div>
+
+  <div id="empty-layer" #emptyLayer></div>
+</div>
+
+<div #tooltip class="tooltip"></div>
