@@ -9,17 +9,17 @@ The platform combines live network monitoring, transaction visualization, and fo
 
 Besides standard block explorer functionality such as tabular listings of the mempool, blocks, and transactions, MoneroVis introduces dedicated visualizations for each of these components.
 ### Mempool Visualization:
-![mempool](https://github.com/user-attachments/assets/ee389b24-1574-475c-a32e-a6e756404eba)
+![mempool](https://i.imgur.com/OYITeqL.jpeg)
 
 ### Blocks Visualization:
-![blocks](https://github.com/user-attachments/assets/67adfa47-17b2-436b-bf48-bfafe4cf2b88)
+![blocks](https://i.imgur.com/LJoVNYP.jpeg)
 
 ### Block Visualization:
-![block](https://github.com/user-attachments/assets/7f0128ca-4ab7-4021-a55b-d696d147d41c)
+![block](https://i.imgur.com/6V6vqgy.jpeg)
 
 ### Transaction Visualization:
-![tx_graph](https://github.com/user-attachments/assets/ad22cc1b-db11-4813-b232-dd8768eef23b)
-![tx_ring](https://github.com/user-attachments/assets/85888766-32cb-48fd-b2d2-56e4b78e6055)
+![tx_graph](https://i.imgur.com/6EHuYHH.jpeg)
+![tx_ring](https://i.imgur.com/H3nhwFE.jpeg)
 
 ---
 
@@ -37,7 +37,7 @@ This allows users to observe how outputs propagate through the network over time
 The Decoy Map can be opened by clicking on a transaction output, either from the transaction graph view or from the tabular transaction interface.
 
 Since a standard Monero node cannot provide information about which future transactions reference a specific output as a ring member, this feature requires a custom database with optimized indices.
-![decoy_map_reduced](https://github.com/user-attachments/assets/20bc8e67-9a3b-4a08-b756-884a950ce3d0)
+![decoy_map_reduced](https://i.imgur.com/rgqM7D1.jpeg)
 
 ---
 
@@ -67,10 +67,10 @@ a13c79f12eb2571539d2c9f24fff7a04bff220d444ef534ead441eaeb8cf17a6,
 52daba8dbabe98665456975fa5f95b2095d08d857710e0aa02d6ed41d8106aed,
 dc377ded419889838a23472ff399c0f4c5ab45b1352d9a1ed34491cfd61c55fc
 ```
-![tracing_auto](https://github.com/user-attachments/assets/6cc97e96-c5cf-4c8f-b09f-ae3ea89be25c)
+![tracing_auto](https://i.imgur.com/sROPdT4.jpeg)
 
 ---
 ## Architecture:
 MoneroVis is implemented as a small microservice-based system consisting of a frontend visualization client, backend API services connected to a Monero node, a WebSocket service that streams live mempool events to the interface, and a data generation pipeline that continuously builds a forward index of blockchain outputs. This architecture enables both real-time network monitoring and the forward-looking queries required for the Decoy Map and automated poisoned outputs tracing.
 
-![diagram](https://github.com/user-attachments/assets/d7011bef-53bd-4e87-a6db-b2cc867a373c)
+![diagram](https://i.imgur.com/YzNK3Ig.jpeg)
