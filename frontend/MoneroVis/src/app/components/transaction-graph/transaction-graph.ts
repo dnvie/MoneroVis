@@ -1961,9 +1961,14 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             const pid = d.data.parent_tx_id;
             const isDuplicate = pid && parentCounts.get(pid)! > 1;
             const isInHighlightSet = pid && this.clipboardService.allHighlightedHashes().has(pid);
-            if (isDuplicate && isInHighlightSet)
+            const isConnected = graph.expandedNodeIds.has(d.data.id);
+            if (isConnected) {
+              circle.attr('stroke', 'var(--graphSegmentExpanded, #59a14f)').attr('stroke-width', 1);
+            } else if (isDuplicate && isInHighlightSet) {
               circle.attr('stroke', '#FF00FF').attr('stroke-width', 2);
-            else circle.attr('stroke', 'none');
+            } else {
+              circle.attr('stroke', 'none');
+            }
           })
           .on('click', (e: MouseEvent, d: any) => this.handleNodeClick_Legacy(e, d, graph))
           .on('contextmenu', (e: MouseEvent, d: any) => this.handleNodeContextMenu(e, d));

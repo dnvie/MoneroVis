@@ -12,6 +12,10 @@
         <div class="skeletonPathBlock skeleton"></div>
         }@else {
         <div class="lighter">
+          <span class="pathLink" (click)="navigateToBlock(homeData!.blocks[0].height)"
+            >Latest Block</span
+          >
+          <span>&nbsp;∙&nbsp;</span>
           <span class="pathLink" (click)="navigateToBlocks()">All Blocks</span>
         </div>
         }

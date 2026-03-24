@@ -3,7 +3,7 @@
   <div class="modal" (click)="$event.stopPropagation()">
     <div class="top">
       @if (modalService.mode() === 'output-merging') {
-      <div class="heading">Output Merging</div>
+      <div class="heading">Poisoned Outputs</div>
       } @if (modalService.mode() === 'legend' || modalService.mode() === 'blocksLegend') {
       <div class="heading">Graph Legend</div>
       } @if (modalService.mode() === 'edit-label') {

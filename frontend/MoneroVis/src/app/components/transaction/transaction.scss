@@ -113,7 +113,7 @@ a:hover {
     background-color: rgb(160 252 177 / 10%);
     border: 1px solid #0d9e2330;
 
-    >.green {
+    > .green {
       color: #0d9e23;
     }
   }
@@ -133,7 +133,7 @@ a:hover {
     background-color: rgb(160 225 252 / 10%);
     border: 1px solid #1c71bc30;
 
-    >.blue {
+    > .blue {
       color: #1c71bc;
     }
   }
@@ -301,6 +301,10 @@ a:hover {
 }
 
 .circle-grey {
+  background: #dbdbdb;
+}
+
+.circle-lightorange {
   background: #fccba0;
 }
 
@@ -526,11 +530,13 @@ a:hover {
     bottom: 0;
     left: 0;
     transform: translateX(-100%);
-    background-image: linear-gradient(90deg,
-        rgba(rgba(168, 166, 162), 0) 0,
-        rgba(rgba(168, 166, 162), 0.5) 20%,
-        rgba(rgba(168, 166, 162), 0.8) 60%,
-        rgba(rgba(168, 166, 162), 0));
+    background-image: linear-gradient(
+      90deg,
+      rgba(rgba(168, 166, 162), 0) 0,
+      rgba(rgba(168, 166, 162), 0.5) 20%,
+      rgba(rgba(168, 166, 162), 0.8) 60%,
+      rgba(rgba(168, 166, 162), 0)
+    );
     animation: shimmer 1s infinite;
     animation-timing-function: cubic-bezier(0.74, -0.01, 0.26, 1.04);
     opacity: 0.3;

@@ -351,12 +351,14 @@
         <div class="circle circle-black"></div>
         } @else if (transactionData.block_height - rm.block_height == 10) {
         <div class="circle circle-blue"></div>
+        } @else if (transactionData.block_height == 0) {
+        <div class="circle circle-grey"></div>
         } @else if (transactionData.block_height - rm.block_height <= 1440) {
         <div class="circle circle-orange"></div>
         } @else if (transactionData.block_height - rm.block_height <= 21600) {
         <div class="circle circle-yellow"></div>
         } @else {
-        <div class="circle circle-grey"></div>
+        <div class="circle circle-lightorange"></div>
         }
         <div class="mobileFlexOutput" (click)="navigateToParentTx(rm.parent_transaction, rm.hash)">
           <span class="lighterTextMobile">Ring Member:&nbsp;</span

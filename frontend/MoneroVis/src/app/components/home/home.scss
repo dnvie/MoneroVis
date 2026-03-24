@@ -48,6 +48,10 @@
   color: var(--textLighter) !important;
 }
 
+.pathLink {
+  text-decoration: underline;
+}
+
 .pathLink:hover {
   cursor: pointer;
   text-decoration: underline;
