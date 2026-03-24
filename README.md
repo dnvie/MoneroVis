@@ -1,28 +1,11 @@
-# MoneroVis
+![logo](https://i.imgur.com/Kr9FHhX.jpeg)
 
-MoneroVis is an interactive visual analytics platform developed as part of a Bachelor's thesis at TU Wien.  
-It is designed to explore and trace activity within Monero’s privacy-preserving blockchain, transforming opaque protocol data into interactive visual structures for analysis and exploration.
+MoneroVis is an interactive visual analytics platform developed as part of my Bachelor's thesis at TU Wien.  
+It is designed to explore and trace activity within Monero's privacy-preserving blockchain, transforming opaque protocol data into interactive visual structures for analysis and exploration.
 
 The platform combines live network monitoring, transaction visualization, and forward-tracing analytics to help users understand how outputs propagate and are reused across the blockchain.
 
 ---
-
-Besides standard block explorer functionality such as tabular listings of the mempool, blocks, and transactions, MoneroVis introduces dedicated visualizations for each of these components.
-### Mempool Visualization:
-![mempool](https://i.imgur.com/OYITeqL.jpeg)
-
-### Blocks Visualization:
-![blocks](https://i.imgur.com/LJoVNYP.jpeg)
-
-### Block Visualization:
-![block](https://i.imgur.com/6V6vqgy.jpeg)
-
-### Transaction Visualization:
-![tx_graph](https://i.imgur.com/6EHuYHH.jpeg)
-![tx_ring](https://i.imgur.com/H3nhwFE.jpeg)
-
----
-
 
 The stand-out features of MoneroVis are the Decoy Map and the automated poisoned outputs tracing.
 
@@ -70,7 +53,124 @@ dc377ded419889838a23472ff399c0f4c5ab45b1352d9a1ed34491cfd61c55fc
 ![tracing_auto](https://i.imgur.com/sROPdT4.jpeg)
 
 ---
+
+Besides standard block explorer functionality such as tabular listings of the mempool, blocks, and transactions, MoneroVis introduces dedicated visualizations for each of these components.
+### Mempool Visualization:
+![mempool](https://i.imgur.com/OYITeqL.jpeg)
+
+### Blocks Visualization:
+![blocks](https://i.imgur.com/LJoVNYP.jpeg)
+
+### Block Visualization:
+![block](https://i.imgur.com/6V6vqgy.jpeg)
+
+### Transaction Visualization:
+![tx_graph](https://i.imgur.com/6EHuYHH.jpeg)
+![tx_ring](https://i.imgur.com/H3nhwFE.jpeg)
+
+---
 ## Architecture:
 MoneroVis is implemented as a small microservice-based system consisting of a frontend visualization client, backend API services connected to a Monero node, a WebSocket service that streams live mempool events to the interface, and a data generation pipeline that continuously builds a forward index of blockchain outputs. This architecture enables both real-time network monitoring and the forward-looking queries required for the Decoy Map and automated poisoned outputs tracing.
 
 ![diagram](https://i.imgur.com/YzNK3Ig.jpeg)
+
+## Run MoneroVis locally:
+### Prerequisites:
+- Go 1.26
+- Angular 20.3+
+- Access to an unrestricted Monero Node with ZMQ enabled (ideally a local full-node)
+
+Before running locally, update hardcoded addresses where needed.
+
+### Backend config
+
+Edit `backend/data/constants.go`:
+
+- `Node` (Monero node RPC)
+- `DecoyApiUrl` (decoy API base)
+- `DatagenBaseURL` (datagen API base)
+
+### Datagen RPC URLs
+
+These are currently hardcoded in code paths and should be set to your node RPC URL:
+
+- `datagen/outputs/outputs.go`
+- `datagen/inputs/inputs.go`
+- `datagen/webserver/main.go`
+
+### Coinbase tracker placeholders
+
+Set these in `datagen/coinbase/coinbase.go`:
+
+- `moneroNodeBaseURL`
+- `wsURL`
+
+### WebSocket ZMQ source
+
+Set `MoneroZmqAddr` in `websocket/websocket.go` to your node ZMQ endpoint (`tcp://...`).
+
+### Frontend API targets
+
+Frontend services currently point to production domains. For local deployment, update:
+
+- `frontend/MoneroVis/src/app/service/home.service.ts`
+- `frontend/MoneroVis/src/app/service/block.service.ts`
+- `frontend/MoneroVis/src/app/service/transaction.service.ts`
+- `frontend/MoneroVis/src/app/service/search.service.ts`
+- `frontend/MoneroVis/src/app/service/decoy.service.ts`
+- `frontend/MoneroVis/src/app/service/clipboard.service.ts`
+- `frontend/MoneroVis/src/app/components/home/home.ts` (WebSocket URL)
+
+### Populate the Database (datagen)
+
+From `datagen`, run:
+
+- one-time generation: `go run . generate`
+- periodic generation: `go run . autogen <minutes>`
+- coinbase tracker: `go run . coinbase`
+
+The SQLite database is stored at `datagen/database/monero.db`.
+
+> Please note that, depending on the hardware used, this process might take a few days.
+> Also make sure at least 200GB of storage space are available for the database file.
+
+### Pi vs PC Mode (`pi` flag)
+
+`datagen` supports an optional trailing `pi` argument:
+
+- `go run . generate pi`
+- `go run . autogen 10 pi`
+- `go run . coinbase pi`
+
+What it does:
+
+- switches SQLite PRAGMA tuning to Raspberry Pi-safe/conservative settings
+- avoids the heavier post-processing gap scan done in non-`pi` mode
+
+Use:
+
+- **without `pi`** on desktop/server hardware (higher performance)
+- **with `pi`** on constrained devices (safer memory/IO profile)
+
+### Start the Services
+
+#### Start datagen API (`:8081`)
+
+From `datagen`: `go run ./webserver`
+
+#### Start backend API (`:8080`)
+
+From `backend`: `go run .`
+
+#### Start websocket service (`:8085`)
+
+From `websocket`: `go run .`
+
+#### Start frontend (`:4200` in dev)
+
+From `frontend/MoneroVis/src`:
+
+- install deps: `npm install`
+- run dev server: `ng serve`
+
+---
