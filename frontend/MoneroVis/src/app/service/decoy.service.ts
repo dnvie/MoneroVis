@@ -3,7 +3,7 @@ import { Injectable, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { DecoyTransactionResponse } from '../data/decoy_transaction';
 
-const baseUrl = 'https://api.monerovis.workers.dev';
+const baseUrl = 'http://localhost:8081';
 
 export type DecoyMapParams =
   | { type: 'global_index'; index: number }

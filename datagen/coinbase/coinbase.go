@@ -8,17 +8,17 @@ import (
 	"time"
 
 	"github.com/dnvie/MoneroVis/datagen/client"
+	"github.com/dnvie/MoneroVis/shared"
 	"github.com/gorilla/websocket"
 )
 
 const (
-	moneroNodeBaseURL = ""    // Add Monero Node URL
-	wsURL             = "ws:" // Add Monero Node websocket URL
-	batchSize         = 1000
+	wsURL     = "ws://localhost:8085"
+	batchSize = 1000
 )
 
 func Start(db *sql.DB) {
-	c := client.NewClient(moneroNodeBaseURL)
+	c := client.NewClient(shared.NewNodePool(shared.DefaultNodes()))
 
 	log.Println("Starting Coinbase Tracker...")
 
@@ -81,10 +81,7 @@ func Init(db *sql.DB, c *client.Client) (bool, error) {
 	currentHeight := startHeight
 
 	for currentHeight <= targetHeight {
-		endHeight := currentHeight + batchSize - 1
-		if endHeight > targetHeight {
-			endHeight = targetHeight
-		}
+		endHeight := min(currentHeight+batchSize-1, targetHeight)
 
 		headers, err := c.GetBlockHeadersRange(currentHeight, endHeight)
 		if err != nil {
@@ -159,7 +156,7 @@ func listenOnce(db *sql.DB, c *client.Client) error {
 func processNewBlock(db *sql.DB, c *client.Client, height uint64) {
 	var minerTxHash string
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		resp, err := c.GetBlockHeaderByHeight(height)
 		if err == nil && resp != nil {
 			minerTxHash = resp.Result.BlockHeader.MinerTxHash

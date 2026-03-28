@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Block, BlocksResponse } from '../data/block';
 
-const baseUrl = 'https://api.monerovis.com';
+const baseUrl = 'http://localhost:8080';
 
 @Injectable({
   providedIn: 'root',

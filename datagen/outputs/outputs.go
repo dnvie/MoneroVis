@@ -13,16 +13,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dnvie/MoneroVis/shared"
 	lru "github.com/hashicorp/golang-lru"
 )
 
 type Client struct {
-	RPCURL     string
+	pool       *shared.NodePool
 	client     *http.Client
 	blockCache *lru.Cache
 }
 
-func NewClient(url string) *Client {
+func NewClient(pool *shared.NodePool) *Client {
 	cache, err := lru.New(10_000)
 	if err != nil {
 		log.Fatalf("Failed to create LRU cache: %v", err)
@@ -35,7 +36,7 @@ func NewClient(url string) *Client {
 	}
 
 	return &Client{
-		RPCURL: url,
+		pool: pool,
 		client: &http.Client{
 			Timeout:   3600 * time.Second,
 			Transport: transport,
@@ -59,9 +60,37 @@ func (c *Client) GetOutsBatch(indices []uint64) []map[string]any {
 		log.Fatalf("Failed to marshal payload: %v", err)
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/get_outs", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Fatalf("Failed to post request: %v", err)
+	var resp *http.Response
+	var reqErr error
+	var url string
+
+	for range 3 {
+		url, reqErr = c.pool.Get()
+		if reqErr != nil {
+			log.Fatalf("No healthy nodes available in pool: %v", reqErr)
+		}
+
+		reqBody := bytes.NewBuffer(body)
+
+		resp, reqErr = c.client.Post(url+"/get_outs", "application/json", reqBody)
+		if reqErr != nil {
+			c.pool.ReportFailure(url, reqErr)
+			log.Printf("[Warning] Node %s network error (EOF): %v. Retrying...", url, reqErr)
+			continue
+		}
+
+		if resp.StatusCode != 200 {
+			c.pool.ReportFailure(url, fmt.Errorf("bad status: %d", resp.StatusCode))
+			resp.Body.Close()
+			log.Printf("[Warning] Node %s returned status %d. Retrying...", url, resp.StatusCode)
+			continue
+		}
+
+		break
+	}
+
+	if resp == nil {
+		log.Fatalf("Failed to get outputs after 3 retries. Last error: %v", reqErr)
 	}
 	defer resp.Body.Close()
 
@@ -119,9 +148,37 @@ func (c *Client) GetBlock(height uint64) map[string]any {
 		log.Fatalf("Failed to marshal block payload: %v", err)
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Fatalf("Failed to post block request: %v", err)
+	var resp *http.Response
+	var reqErr error
+	var url string
+
+	for range 3 {
+		url, reqErr = c.pool.Get()
+		if reqErr != nil {
+			log.Fatalf("No healthy nodes available in pool: %v", reqErr)
+		}
+
+		reqBody := bytes.NewBuffer(body)
+		resp, reqErr = c.client.Post(url+"/json_rpc", "application/json", reqBody)
+
+		if reqErr != nil {
+			c.pool.ReportFailure(url, reqErr)
+			log.Printf("[Warning] Node %s network error getting block %d: %v. Retrying...", url, height, reqErr)
+			continue
+		}
+
+		if resp.StatusCode != 200 {
+			c.pool.ReportFailure(url, fmt.Errorf("bad status: %d", resp.StatusCode))
+			resp.Body.Close()
+			log.Printf("[Warning] Node %s returned status %d getting block %d. Retrying...", url, resp.StatusCode, height)
+			continue
+		}
+
+		break
+	}
+
+	if resp == nil {
+		log.Fatalf("Failed to post block request after 3 retries. Last error: %v", reqErr)
 	}
 	defer resp.Body.Close()
 
@@ -174,9 +231,37 @@ func (c *Client) GetBlockCount() uint64 {
 		log.Fatalf("Failed to marshal block count payload: %v", err)
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Fatalf("Failed to post block count request: %v", err)
+	var resp *http.Response
+	var reqErr error
+	var url string
+
+	for range 3 {
+		url, reqErr = c.pool.Get()
+		if reqErr != nil {
+			log.Fatalf("No healthy nodes available in pool: %v", reqErr)
+		}
+
+		reqBody := bytes.NewBuffer(body)
+		resp, reqErr = c.client.Post(url+"/json_rpc", "application/json", reqBody)
+
+		if reqErr != nil {
+			c.pool.ReportFailure(url, reqErr)
+			log.Printf("[Warning] Node %s network error getting block count: %v. Retrying...", url, reqErr)
+			continue
+		}
+
+		if resp.StatusCode != 200 {
+			c.pool.ReportFailure(url, fmt.Errorf("bad status: %d", resp.StatusCode))
+			resp.Body.Close()
+			log.Printf("[Warning] Node %s returned status %d getting block count. Retrying...", url, resp.StatusCode)
+			continue
+		}
+
+		break
+	}
+
+	if resp == nil {
+		log.Fatalf("Failed to post block count request after 3 retries. Last error: %v", reqErr)
 	}
 	defer resp.Body.Close()
 
@@ -199,54 +284,96 @@ func (c *Client) GetBlockCount() uint64 {
 }
 
 func (c *Client) GetTransactions(hashes []string) map[string]map[string]any {
-	payload := map[string]any{
-		"txs_hashes":     hashes,
-		"decode_as_json": true,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		log.Fatalf("Failed to marshal transactions payload: %v", err)
-	}
-
-	resp, err := c.client.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Fatalf("Failed to post transactions request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Fatalf("Failed to decode transactions response: %v", err)
-	}
-
-	if status, ok := result["status"].(string); !ok || status != "OK" {
-		log.Fatalf("get_transactions status not OK: %v", result)
-	}
-
-	rawTxs, ok := result["txs_as_json"].([]any)
-	if !ok {
-		log.Fatalf("txs_as_json missing")
-	}
-
-	if len(rawTxs) != len(hashes) {
-		log.Fatalf("Mismatch between requested hashes and returned transactions")
-	}
-
 	txsMap := make(map[string]map[string]any, len(hashes))
-	for i, raw := range rawTxs {
-		str, ok := raw.(string)
-		if !ok {
-			log.Fatalf("txs_as_json[%d] is not a string", i)
-		}
-
-		var tx map[string]any
-		if err := json.Unmarshal([]byte(str), &tx); err != nil {
-			log.Fatalf("Failed to decode transaction %d: %v", i, err)
-		}
-
-		txsMap[hashes[i]] = tx
+	if len(hashes) == 0 {
+		return txsMap
 	}
+
+	const maxTxsPerRequest = 50
+
+	for i := 0; i < len(hashes); i += maxTxsPerRequest {
+		end := min(i+maxTxsPerRequest, len(hashes))
+		batchHashes := hashes[i:end]
+
+		payload := map[string]any{
+			"txs_hashes":     batchHashes,
+			"decode_as_json": true,
+		}
+
+		body, err := json.Marshal(payload)
+		if err != nil {
+			log.Fatalf("Failed to marshal transactions payload: %v", err)
+		}
+
+		var resp *http.Response
+		var reqErr error
+		var url string
+
+		for range 3 {
+			url, reqErr = c.pool.Get()
+			if reqErr != nil {
+				log.Fatalf("No healthy nodes available in pool: %v", reqErr)
+			}
+
+			reqBody := bytes.NewBuffer(body)
+
+			resp, reqErr = c.client.Post(url+"/get_transactions", "application/json", reqBody)
+			if reqErr != nil {
+				c.pool.ReportFailure(url, reqErr)
+				log.Printf("[Warning] Node %s network error fetching txs: %v. Retrying...", url, reqErr)
+				continue
+			}
+
+			if resp.StatusCode != 200 {
+				c.pool.ReportFailure(url, fmt.Errorf("bad status: %d", resp.StatusCode))
+				resp.Body.Close()
+				log.Printf("[Warning] Node %s returned status %d fetching txs. Retrying...", url, resp.StatusCode)
+				continue
+			}
+
+			break
+		}
+
+		if resp == nil {
+			log.Fatalf("Failed to get transactions batch after 3 retries. Last error: %v", reqErr)
+		}
+
+		var result map[string]any
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			log.Fatalf("Failed to decode transactions response: %v", decodeErr)
+		}
+
+		if status, ok := result["status"].(string); !ok || status != "OK" {
+			log.Fatalf("get_transactions status not OK: %v", result)
+		}
+
+		rawTxs, ok := result["txs_as_json"].([]any)
+		if !ok {
+			log.Fatalf("txs_as_json missing")
+		}
+
+		if len(rawTxs) != len(batchHashes) {
+			log.Fatalf("Mismatch between requested hashes and returned transactions in batch")
+		}
+
+		for j, raw := range rawTxs {
+			str, ok := raw.(string)
+			if !ok {
+				log.Fatalf("txs_as_json[%d] is not a string", j)
+			}
+
+			var tx map[string]any
+			if err := json.Unmarshal([]byte(str), &tx); err != nil {
+				log.Fatalf("Failed to decode transaction %d: %v", j, err)
+			}
+
+			txsMap[batchHashes[j]] = tx
+		}
+	}
+
 	return txsMap
 }
 
@@ -427,20 +554,18 @@ func worker(id int, client *Client, jobs <-chan Job, processed *uint64, db *sql.
 
 func createIndices(start, count uint64) []uint64 {
 	arr := make([]uint64, count)
-	for i := uint64(0); i < count; i++ {
+	for i := range count {
 		arr[i] = start + i
 	}
 	return arr
 }
 
-func Generate(isPi bool, db *sql.DB) {
-	rpcURL := "http://192.168.1.158:18081"
-	client := NewClient(rpcURL)
+func Generate(isPi bool, db *sql.DB, client *Client) {
 	defer client.Close()
 
 	totalProcessed := uint64(0)
 	numWorkers := 8
-	batchSize := uint64(10_000)
+	batchSize := uint64(1_000)
 
 	// SQLite Setup
 	var startIndex uint64 = 0
@@ -468,7 +593,7 @@ func Generate(isPi bool, db *sql.DB) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		wg.Add(1)
 		go worker(i, client, jobs, &totalProcessed, db, &mu, &wg)
 	}
@@ -522,7 +647,7 @@ func FillGaps(client *Client, ranges []MissingRange, db *sql.DB) {
 	var totalProcessed uint64
 
 	numWorkers := 8
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		wg.Add(1)
 		go gapWorker(i, client, jobs, &totalProcessed, db, &mu, &wg)
 	}

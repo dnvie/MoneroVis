@@ -78,48 +78,7 @@ MoneroVis is implemented as a small microservice-based system consisting of a fr
 ### Prerequisites:
 - Go 1.26
 - Angular 20.3+
-- Access to an unrestricted Monero Node with ZMQ enabled (ideally a local full-node)
-
-Before running locally, update hardcoded addresses where needed.
-
-### Backend config
-
-Edit `backend/data/constants.go`:
-
-- `Node` (Monero node RPC)
-- `DecoyApiUrl` (decoy API base)
-- `DatagenBaseURL` (datagen API base)
-
-### Datagen RPC URLs
-
-These are currently hardcoded in code paths and should be set to your node RPC URL:
-
-- `datagen/outputs/outputs.go`
-- `datagen/inputs/inputs.go`
-- `datagen/webserver/main.go`
-
-### Coinbase tracker placeholders
-
-Set these in `datagen/coinbase/coinbase.go`:
-
-- `moneroNodeBaseURL`
-- `wsURL`
-
-### WebSocket ZMQ source
-
-Set `MoneroZmqAddr` in `websocket/websocket.go` to your node ZMQ endpoint (`tcp://...`).
-
-### Frontend API targets
-
-Frontend services currently point to production domains. For local deployment, update:
-
-- `frontend/MoneroVis/src/app/service/home.service.ts`
-- `frontend/MoneroVis/src/app/service/block.service.ts`
-- `frontend/MoneroVis/src/app/service/transaction.service.ts`
-- `frontend/MoneroVis/src/app/service/search.service.ts`
-- `frontend/MoneroVis/src/app/service/decoy.service.ts`
-- `frontend/MoneroVis/src/app/service/clipboard.service.ts`
-- `frontend/MoneroVis/src/app/components/home/home.ts` (WebSocket URL)
+- Nice to have but not necessary: Access to an unrestricted Monero Node with ZMQ enabled (ideally a local full-node)
 
 ### Populate the Database (datagen)
 
@@ -132,7 +91,7 @@ From `datagen`, run:
 The SQLite database is stored at `datagen/database/monero.db`.
 
 > Please note that, depending on the hardware used, this process might take a few days.
-> Also make sure at least 200GB of storage space are available for the database file.
+> Also make sure at least 250GB of storage space are available for the database file.
 
 ### Pi vs PC Mode (`pi` flag)
 
@@ -140,7 +99,7 @@ The SQLite database is stored at `datagen/database/monero.db`.
 
 - `go run . generate pi`
 - `go run . autogen 10 pi`
-- `go run . coinbase pi`
+- `go run ./webserver pi`
 
 What it does:
 
@@ -151,6 +110,7 @@ Use:
 
 - **without `pi`** on desktop/server hardware (higher performance)
 - **with `pi`** on constrained devices (safer memory/IO profile)
+- (After the intial database population, it is recommended to run the autogen service in "pi" mode)
 
 ### Start the Services
 

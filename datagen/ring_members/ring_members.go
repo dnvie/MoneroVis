@@ -76,29 +76,46 @@ func Generate(isPi bool, db *sql.DB) {
 
 	var writerWg sync.WaitGroup
 	writerWg.Go(func() {
-		stmt, err := db.Prepare("INSERT OR IGNORE INTO ring_members (output_id, tx_hash, input_id) VALUES (?, ?, ?)")
+		stmtRM, err := db.Prepare("INSERT OR IGNORE INTO ring_members (output_id, tx_hash, input_id) VALUES (?, ?, ?)")
 		if err != nil {
-			log.Fatalf("Failed to prepare insert statement: %v", err)
+			log.Fatalf("Failed to prepare RM insert: %v", err)
 		}
-		defer stmt.Close()
+		defer stmtRM.Close()
+
+		stmtDecoy, err := db.Prepare(`
+        INSERT INTO decoy_counts (output_id, count)
+        VALUES (?, 1)
+        ON CONFLICT(output_id) DO UPDATE SET count = count + 1
+    `)
+		if err != nil {
+			log.Fatalf("Failed to prepare Decoy insert: %v", err)
+		}
+		defer stmtDecoy.Close()
 
 		tx, err := db.Begin()
 		if err != nil {
 			log.Fatalf("Writer failed to begin transaction: %v", err)
 		}
 
-		txStmt := tx.Stmt(stmt)
+		txStmtRM := tx.Stmt(stmtRM)
+		txStmtDecoy := tx.Stmt(stmtDecoy)
+
 		txCount := 0
 		totalCount := 0
 		var lastInputID uint64 = 0
 
 		for rmBatch := range results {
 			for _, rm := range rmBatch {
-				_, err := txStmt.Exec(rm.output_id, rm.tx_hash, rm.input_id)
-				if err != nil {
+				if _, err := txStmtRM.Exec(rm.output_id, rm.tx_hash, rm.input_id); err != nil {
 					tx.Rollback()
-					log.Fatalf("Failed insert: %v", err)
+					log.Fatalf("Failed RM insert: %v", err)
 				}
+
+				if _, err := txStmtDecoy.Exec(rm.output_id); err != nil {
+					tx.Rollback()
+					log.Fatalf("Failed decoy update: %v", err)
+				}
+
 				txCount++
 				totalCount++
 
@@ -111,7 +128,8 @@ func Generate(isPi bool, db *sql.DB) {
 						log.Fatalf("Commit failed: %v", err)
 					}
 					tx, _ = db.Begin()
-					txStmt = tx.Stmt(stmt)
+					txStmtRM = tx.Stmt(stmtRM)
+					txStmtDecoy = tx.Stmt(stmtDecoy)
 					txCount = 0
 				}
 				lastInputID = rm.input_id

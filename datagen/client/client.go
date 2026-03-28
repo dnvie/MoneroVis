@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dnvie/MoneroVis/shared"
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/icholy/digest"
 )
 
 type Client struct {
-	RPCURL       string
+	pool         *shared.NodePool
 	httpClient   *http.Client
 	blockCache   *lru.Cache
 	txDataCache  *lru.Cache
@@ -87,17 +89,70 @@ func (t Target) GetKey() string {
 	return t.Key
 }
 
-func NewClient(url string) *Client {
+func NewClient(pool *shared.NodePool) *Client {
 	blockCache, _ := lru.New(1000)
 	txDataCache, _ := lru.New(1000)
 	keyToTxCache, _ := lru.New(1000)
+
+	transport := &digest.Transport{
+		Username: "",
+		Password: "",
+	}
+
 	return &Client{
-		RPCURL:       url,
-		httpClient:   &http.Client{Timeout: 60 * time.Second},
+		pool:         pool,
+		httpClient:   &http.Client{Timeout: 60 * time.Second, Transport: transport},
 		blockCache:   blockCache,
 		txDataCache:  txDataCache,
 		keyToTxCache: keyToTxCache,
 	}
+}
+
+func (c *Client) doPost(endpoint string, payload any) (*http.Response, error) {
+	var body []byte
+	var err error
+
+	if payload != nil {
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal payload: %w", err)
+		}
+	}
+
+	var resp *http.Response
+	var reqErr error
+	var url string
+
+	for range 3 {
+		url, reqErr = c.pool.Get()
+		if reqErr != nil {
+			return nil, fmt.Errorf("pool exhausted: %w", reqErr)
+		}
+
+		if payload != nil {
+			reqBody := bytes.NewBuffer(body)
+			resp, reqErr = c.httpClient.Post(url+endpoint, "application/json", reqBody)
+		} else {
+			resp, reqErr = c.httpClient.Post(url+endpoint, "application/json", nil)
+		}
+
+		if reqErr != nil {
+			c.pool.ReportFailure(url, reqErr)
+			log.Printf("[Warning] Node %s failed (%s): %v. Retrying...", url, endpoint, reqErr)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			c.pool.ReportFailure(url, fmt.Errorf("bad HTTP status: %d", resp.StatusCode))
+			resp.Body.Close()
+			log.Printf("[Warning] Node %s returned status %d for %s. Retrying...", url, resp.StatusCode, endpoint)
+			continue
+		}
+
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("all retries failed for %s. Last error: %v", endpoint, reqErr)
 }
 
 func (c *Client) FindParentTx(height uint64, key string) (string, error) {
@@ -168,26 +223,44 @@ func (c *Client) FindParentTx(height uint64, key string) (string, error) {
 }
 
 func (c *Client) GetOutsBatch(indices []uint64) ([]Output, error) {
-	outputs := make([]map[string]uint64, len(indices))
-	for i, index := range indices {
-		outputs[i] = map[string]uint64{"amount": 0, "index": index}
+	if len(indices) == 0 {
+		return nil, nil
 	}
-	payload, _ := json.Marshal(map[string]any{"outputs": outputs})
 
-	resp, err := c.httpClient.Post(c.RPCURL+"/get_outs", "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	var allOuts []Output
+	batchSize := 500
 
-	var r GetOutsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return nil, err
+	for i := 0; i < len(indices); i += batchSize {
+		end := min(i+batchSize, len(indices))
+		batch := indices[i:end]
+
+		outputs := make([]map[string]uint64, len(batch))
+		for j, index := range batch {
+			outputs[j] = map[string]uint64{"amount": 0, "index": index}
+		}
+
+		payload := map[string]any{"outputs": outputs}
+
+		resp, err := c.doPost("/get_outs", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get outs batch: %w", err)
+		}
+
+		var r GetOutsResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&r)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode get_outs response: %w", decodeErr)
+		}
+		if r.Status != "OK" {
+			return nil, fmt.Errorf("get_outs status not OK: %s", r.Status)
+		}
+
+		allOuts = append(allOuts, r.Outs...)
 	}
-	if r.Status != "OK" {
-		return nil, fmt.Errorf("get_outs status not OK: %s", r.Status)
-	}
-	return r.Outs, nil
+
+	return allOuts, nil
 }
 
 func (c *Client) GetBlock(height uint64) (*Block, error) {
@@ -195,19 +268,22 @@ func (c *Client) GetBlock(height uint64) (*Block, error) {
 		return cached.(*Block), nil
 	}
 
-	payload, _ := json.Marshal(map[string]any{
-		"jsonrpc": "2.0", "id": "0", "method": "get_block", "params": map[string]uint64{"height": height},
-	})
+	payload := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "0",
+		"method":  "get_block",
+		"params":  map[string]uint64{"height": height},
+	}
 
-	resp, err := c.httpClient.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(payload))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get block: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var r GetBlockResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode block response: %w", err)
 	}
 
 	c.blockCache.Add(height, &r.Result)
@@ -219,34 +295,46 @@ func (c *Client) GetTransactions(hashes []string) (map[string]Transaction, error
 		return make(map[string]Transaction), nil
 	}
 
-	payload, _ := json.Marshal(map[string]any{"txs_hashes": hashes, "decode_as_json": true})
-
-	resp, err := c.httpClient.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var r GetTransactionsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return nil, err
-	}
-	if r.Status != "OK" {
-		return nil, fmt.Errorf("get_transactions status not OK: %s", r.Status)
-	}
-
-	if len(r.TxsAsJSON) != len(hashes) {
-		log.Printf("Warning: Mismatched request/response length for get_transactions. Requested %d, got %d", len(hashes), len(r.TxsAsJSON))
-	}
-
 	resultMap := make(map[string]Transaction, len(hashes))
-	for i, txJSON := range r.TxsAsJSON {
-		var tx Transaction
-		if err := json.Unmarshal([]byte(txJSON), &tx); err != nil {
-			log.Printf("Warning: could not unmarshal transaction for hash %s: %v", hashes[i], err)
-			continue
+	batchSize := 50
+
+	for i := 0; i < len(hashes); i += batchSize {
+		end := min(i+batchSize, len(hashes))
+		batch := hashes[i:end]
+
+		payload := map[string]any{
+			"txs_hashes":     batch,
+			"decode_as_json": true,
 		}
-		resultMap[hashes[i]] = tx
+
+		resp, err := c.doPost("/get_transactions", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get transactions batch: %w", err)
+		}
+
+		var r GetTransactionsResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&r)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode get_transactions response: %w", decodeErr)
+		}
+		if r.Status != "OK" {
+			return nil, fmt.Errorf("get_transactions status not OK: %s", r.Status)
+		}
+
+		if len(r.TxsAsJSON) != len(batch) {
+			log.Printf("Warning: Mismatched request/response length for get_transactions batch. Requested %d, got %d", len(batch), len(r.TxsAsJSON))
+		}
+
+		for j, txJSON := range r.TxsAsJSON {
+			var tx Transaction
+			if err := json.Unmarshal([]byte(txJSON), &tx); err != nil {
+				log.Printf("Warning: could not unmarshal transaction for hash %s: %v", batch[j], err)
+				continue
+			}
+			resultMap[batch[j]] = tx
+		}
 	}
 
 	return resultMap, nil
@@ -257,44 +345,49 @@ func (c *Client) GetTransactionOutputIndices(hashes []string) (map[string][]int,
 		return make(map[string][]int), nil
 	}
 
-	payload := map[string]any{
-		"txs_hashes":     hashes,
-		"decode_as_json": false,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal transaction payload: %w", err)
-	}
-
-	resp, err := c.httpClient.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to post transaction request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result NodeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode transaction response: %w", err)
-	}
-
-	if result.Status != "OK" {
-		return nil, fmt.Errorf("get_transactions status not OK: %v", result.Status)
-	}
-
 	outputMap := make(map[string][]int)
-	for _, tx := range result.Txs {
-		outputMap[tx.TxHash] = tx.OutputIndices
+	batchSize := 50
+
+	for i := 0; i < len(hashes); i += batchSize {
+		end := min(i+batchSize, len(hashes))
+		batch := hashes[i:end]
+
+		payload := map[string]any{
+			"txs_hashes":     batch,
+			"decode_as_json": false,
+		}
+
+		resp, err := c.doPost("/get_transactions", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get transaction output indices batch: %w", err)
+		}
+
+		var result NodeResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode transaction response: %w", decodeErr)
+		}
+
+		if result.Status != "OK" {
+			return nil, fmt.Errorf("get_transactions status not OK: %v", result.Status)
+		}
+
+		for _, tx := range result.Txs {
+			outputMap[tx.TxHash] = tx.OutputIndices
+		}
 	}
 
 	return outputMap, nil
 }
 
 func (c *Client) GetBlockCount() (uint64, error) {
-	payload, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": "0", "method": "get_block_count"})
+	payload := map[string]any{"jsonrpc": "2.0", "id": "0", "method": "get_block_count"}
 
-	resp, err := c.httpClient.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(payload))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get block count: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -305,7 +398,7 @@ func (c *Client) GetBlockCount() (uint64, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to decode block count response: %w", err)
 	}
 
 	return result.Result.Count, nil
@@ -319,17 +412,17 @@ type GetInfoResponse struct {
 }
 
 func (c *Client) GetInfo() (uint64, error) {
-	payload, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": "0", "method": "get_info"})
+	payload := map[string]any{"jsonrpc": "2.0", "id": "0", "method": "get_info"}
 
-	resp, err := c.httpClient.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(payload))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var r GetInfoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to decode get_info response: %w", err)
 	}
 	if r.Result.Status != "OK" {
 		return 0, fmt.Errorf("get_info status not OK: %s", r.Result.Status)
@@ -353,22 +446,22 @@ type BlockHeaderResponse struct {
 }
 
 func (c *Client) GetBlockHeaderByHeight(height uint64) (*BlockHeaderResponse, error) {
-	payload, _ := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "0",
 		"method":  "get_block_header_by_height",
 		"params":  map[string]uint64{"height": height},
-	})
+	}
 
-	resp, err := c.httpClient.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(payload))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get block header by height: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var r BlockHeaderResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode block header response: %w", err)
 	}
 
 	if r.Result.Status != "OK" {
@@ -386,7 +479,7 @@ type BlockHeadersRangeResponse struct {
 }
 
 func (c *Client) GetBlockHeadersRange(startHeight, endHeight uint64) ([]BlockHeader, error) {
-	payload, _ := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "0",
 		"method":  "get_block_headers_range",
@@ -394,17 +487,17 @@ func (c *Client) GetBlockHeadersRange(startHeight, endHeight uint64) ([]BlockHea
 			"start_height": startHeight,
 			"end_height":   endHeight,
 		},
-	})
+	}
 
-	resp, err := c.httpClient.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(payload))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get block headers range: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var r BlockHeadersRangeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode block headers range response: %w", err)
 	}
 
 	if r.Result.Status != "OK" {

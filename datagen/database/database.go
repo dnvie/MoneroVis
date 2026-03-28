@@ -23,6 +23,8 @@ func InitDb(isPi bool) *sql.DB {
 			"PRAGMA cache_size=-512000;",
 			"PRAGMA mmap_size=2000000000;",
 			"PRAGMA foreign_keys=ON;",
+			"PRAGMA wal_autocheckpoint=4000;",
+			"PRAGMA page_size=8192;",
 		}
 	} else {
 		log.Println("Applying high-performance PC optimizations")
@@ -63,6 +65,10 @@ func InitDb(isPi bool) *sql.DB {
 		`CREATE TABLE IF NOT EXISTS coinbase_txs (
     		tx_hash TEXT PRIMARY KEY
       	) WITHOUT ROWID`,
+		`CREATE TABLE IF NOT EXISTS decoy_counts (
+        	output_id INTEGER PRIMARY KEY,
+           	count INTEGER NOT NULL DEFAULT 0
+        ) WITHOUT ROWID`,
 		`CREATE INDEX IF NOT EXISTS idx_ring_members_reverse ON ring_members(tx_hash, input_id, output_id);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_outputs_lookup_hash ON outputs(lookup_hash);`,
 		`CREATE TABLE IF NOT EXISTS metadata (

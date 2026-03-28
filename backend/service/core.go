@@ -21,10 +21,7 @@ func GetHomeData(c *client.Client) (*data.HomeData, error) {
 	chainHeight := info.Result.Height
 
 	endHeight := int64(chainHeight) - 1
-	startHeight := endHeight - 14
-	if startHeight < 0 {
-		startHeight = 0
-	}
+	startHeight := max(endHeight-14, 0)
 
 	headersResp, err := c.GetBlockHeadersRange(uint64(startHeight), uint64(endHeight))
 	if err != nil {
@@ -372,10 +369,7 @@ func processTransaction(txData *data.Tx, c *client.Client, includeCoinbase bool)
 	var allOuts []data.Out
 	batchSize := 500
 	for i := 0; i < len(allOutRequests); i += batchSize {
-		end := i + batchSize
-		if end > len(allOutRequests) {
-			end = len(allOutRequests)
-		}
+		end := min(i+batchSize, len(allOutRequests))
 
 		batch := allOutRequests[i:end]
 		outsResp, err := c.GetOutsMixed(batch)
@@ -395,7 +389,7 @@ func processTransaction(txData *data.Tx, c *client.Client, includeCoinbase bool)
 			return nil, fmt.Errorf("mismatch in batched outs response length")
 		}
 
-		for k := 0; k < offsetCount; k++ {
+		for k := range offsetCount {
 			out := allOuts[outsIndex+k]
 			currentRingMembers = append(currentRingMembers, data.RingMember{
 				Hash:              out.Key,

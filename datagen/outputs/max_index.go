@@ -6,26 +6,27 @@ import (
 )
 
 func FindMaxOutputIndex(client *Client, start uint64) uint64 {
-	low := start
-	high := low + 1
 
-	for {
-		if !probeOutputIndex(client, high) {
-			break
-		}
-		low = high
-		high *= 2
+	if !probeOutputIndex(client, start) {
+		return start - 1
 	}
 
-	for low < high {
-		mid := (low + high + 1) / 2
+	low := start
+	delta := uint64(1)
+	for probeOutputIndex(client, low+delta) {
+		low += delta
+		delta *= 2
+	}
+	high := low + delta
+
+	for low+1 < high {
+		mid := (low + high) / 2
 		if probeOutputIndex(client, mid) {
 			low = mid
 		} else {
-			high = mid - 1
+			high = mid
 		}
 	}
-
 	return low
 }
 
@@ -39,8 +40,14 @@ func probeOutputIndex(client *Client, index uint64) bool {
 		return false
 	}
 
-	resp, err := client.client.Post(client.RPCURL+"/get_outs", "application/json", bytes.NewBuffer(body))
+	url, rpcerr := client.pool.Get()
+	if rpcerr != nil {
+		return false
+	}
+
+	resp, err := client.client.Post(url+"/get_outs", "application/json", bytes.NewBuffer(body))
 	if err != nil {
+		client.pool.ReportFailure(url, err)
 		return false
 	}
 	defer resp.Body.Close()

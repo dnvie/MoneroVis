@@ -28,10 +28,7 @@ type BlockBatch struct {
 
 const metadataKey = "last_processed_input_block"
 
-func Generate(isPi bool, db *sql.DB) {
-	rpcURL := "http://192.168.1.158:18081"
-	client := outputs.NewClient(rpcURL)
-	defer client.Close()
+func Generate(isPi bool, db *sql.DB, client *outputs.Client) {
 
 	var startIndex uint64 = 0
 	row := db.QueryRow("SELECT value FROM metadata WHERE key = ?", metadataKey)
@@ -59,7 +56,7 @@ func Generate(isPi bool, db *sql.DB) {
 
 	var wg sync.WaitGroup
 
-	for w := 0; w < numWorkers; w++ {
+	for w := range numWorkers {
 		wg.Add(1)
 		go worker(w, client, jobs, results, &wg)
 	}

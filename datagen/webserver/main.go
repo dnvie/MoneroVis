@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/dnvie/MoneroVis/datagen/client"
 	"github.com/dnvie/MoneroVis/datagen/database"
 	"github.com/dnvie/MoneroVis/datagen/decoys"
+	"github.com/dnvie/MoneroVis/shared"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 )
@@ -259,10 +261,9 @@ func fetchDecoyCountsBatch(db *sql.DB, ids []int64, results map[string]int) erro
 	}
 
 	query := fmt.Sprintf(`
-		SELECT output_id, COUNT(*)
-		FROM ring_members
-		WHERE output_id IN (%s)
-		GROUP BY output_id`,
+		SELECT output_id, count
+		FROM decoy_counts
+		WHERE output_id IN (%s)`,
 		strings.Join(placeholders, ","))
 
 	rows, err := db.Query(query, args...)
@@ -275,6 +276,7 @@ func fetchDecoyCountsBatch(db *sql.DB, ids []int64, results map[string]int) erro
 		var outputID int64
 		var count int
 		if err := rows.Scan(&outputID, &count); err != nil {
+			log.Printf("Scan error in batch: %v", err)
 			continue
 		}
 		results[strconv.FormatInt(outputID, 10)] = count
@@ -284,18 +286,33 @@ func fetchDecoyCountsBatch(db *sql.DB, ids []int64, results map[string]int) erro
 }
 
 func (app *App) getIsCoinbaseHandler(w http.ResponseWriter, r *http.Request) {
-	hashesParam := r.URL.Query().Get("hashes")
-	if hashesParam == "" {
-		http.Error(w, "hashes query parameter is required", http.StatusBadRequest)
-		return
-	}
+	var cleanHashes []string
 
-	hashes := strings.Split(hashesParam, ",")
-	cleanHashes := make([]string, 0, len(hashes))
-	for _, h := range hashes {
-		h = strings.TrimSpace(h)
-		if h != "" {
-			cleanHashes = append(cleanHashes, h)
+	if r.Method == http.MethodPost {
+		var payload struct {
+			Hashes []string `json:"hashes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+			return
+		}
+		for _, h := range payload.Hashes {
+			h = strings.TrimSpace(h)
+			if h != "" {
+				cleanHashes = append(cleanHashes, h)
+			}
+		}
+	} else {
+		hashesParam := r.URL.Query().Get("hashes")
+		if hashesParam == "" {
+			http.Error(w, "hashes query parameter is required", http.StatusBadRequest)
+			return
+		}
+		for h := range strings.SplitSeq(hashesParam, ",") {
+			h = strings.TrimSpace(h)
+			if h != "" {
+				cleanHashes = append(cleanHashes, h)
+			}
 		}
 	}
 
@@ -389,17 +406,33 @@ func quietLogger(next http.Handler) http.Handler {
 func main() {
 
 	isPi := false
+
+	if len(os.Args) > 1 {
+		if os.Args[1] == "pi" {
+			isPi = true
+		} else {
+			fmt.Println("Usage: go run main.go [pi]")
+			os.Exit(1)
+		}
+	}
+
 	db := database.InitDb(isPi)
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	if isPi {
+		db.SetMaxOpenConns(4)
+		db.SetMaxIdleConns(2)
+	} else {
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+	}
+
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	defer db.Close()
 
-	rpcURL := "http://192.168.1.158:18081"
-
-	rpcClient := client.NewClient(rpcURL)
+	pool := shared.NewNodePool(shared.DefaultNodes())
+	pool.StartHealthChecks(30 * time.Second)
+	rpcClient := client.NewClient(pool)
 
 	app := &App{
 		DB:     db,
@@ -420,8 +453,8 @@ func main() {
 			"https://*.monerovis.pages.dev",
 			"https://monerovis.pages.dev",
 		},
-		AllowedMethods: []string{"GET", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "CF-Access-Client-Id", "CF-Access-Client-Secret"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders: []string{"*"},
 	}))
 
 	r.Use(limitMiddleware)
@@ -432,6 +465,7 @@ func main() {
 	r.Get("/batchDecoyTxs", app.getDecoysByIndicesHandler)
 	r.Get("/batchTxs", app.getDecoysByTxHashesHandler)
 	r.Get("/is_coinbase", app.getIsCoinbaseHandler)
+	r.Post("/is_coinbase", app.getIsCoinbaseHandler)
 
 	port := "8081"
 	log.Printf("Starting server on port %s...", port)

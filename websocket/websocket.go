@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,9 +16,18 @@ import (
 )
 
 const (
-	MoneroZmqAddr = "tcp://" // Add Monero Node ZMQ address
-	WsPort        = 8085
+	WsPort     = 8085
+	MaxClients = 50
 )
+
+var connSemaphore = make(chan struct{}, MaxClients)
+
+var moneroZmqAddrs = []string{
+	"tcp://80.69.42.48:18084",
+	"tcp://88.214.26.118:18083",
+	"tcp://51.68.212.53:18084",
+	"tcp://193.24.208.109:18083",
+}
 
 type FrontendBlock struct {
 	Height      float64  `json:"height"`
@@ -82,31 +92,101 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func pickFallback(current string) string {
+	candidates := make([]string, 0, len(moneroZmqAddrs)-1)
+	for _, addr := range moneroZmqAddrs {
+		if addr != current {
+			candidates = append(candidates, addr)
+		}
+	}
+	if len(candidates) == 0 {
+		return current
+	}
+	return candidates[rand.Intn(len(candidates))]
+}
+
+func connectSubscriber(addr string) (*zmq4.Socket, error) {
+	sub, err := zmq4.NewSocket(zmq4.SUB)
+	if err != nil {
+		return nil, err
+	}
+	if err := sub.Connect(addr); err != nil {
+		sub.Close()
+		return nil, err
+	}
+	sub.SetSubscribe("json-full-chain_main")
+	sub.SetSubscribe("json-minimal-chain_main")
+	sub.SetSubscribe("json-full-txpool_add")
+	sub.SetSubscribe("json-minimal-txpool_add")
+	return sub, nil
+}
+
 func main() {
-	subscriber, err := zmq4.NewSocket(zmq4.SUB)
+	currentAddr := moneroZmqAddrs[0]
+
+	subscriber, err := connectSubscriber(currentAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer subscriber.Close()
 
-	if err := subscriber.Connect(MoneroZmqAddr); err != nil {
-		log.Fatal(err)
-	}
-
-	subscriber.SetSubscribe("json-full-chain_main")
-	subscriber.SetSubscribe("json-minimal-chain_main")
-	subscriber.SetSubscribe("json-full-txpool_add")
-	subscriber.SetSubscribe("json-minimal-txpool_add")
-
-	fmt.Printf("Connected to Monero Node at %s\n", MoneroZmqAddr)
+	fmt.Printf("Connected to Monero Node at %s\n", currentAddr)
 	fmt.Printf("WebSocket Server running on ws://localhost:%d\n", WsPort)
+
+	var lastMsgTime time.Time = time.Now()
+	var lastMsgMu sync.Mutex
+
+	// Health checker: if no message arrives within 120s, consider the connection dead and reconnect to a fallback node.
+	var subMu sync.Mutex
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			lastMsgMu.Lock()
+			elapsed := time.Since(lastMsgTime)
+			lastMsgMu.Unlock()
+
+			if elapsed > 120*time.Second {
+				subMu.Lock()
+				log.Printf("[health] No messages for %.0fs from %s — switching node...", elapsed.Seconds(), currentAddr)
+				subscriber.Close()
+
+				newAddr := pickFallback(currentAddr)
+				newSub, err := connectSubscriber(newAddr)
+				if err != nil {
+					log.Printf("[health] Failed to connect to %s: %v", newAddr, err)
+					subMu.Unlock()
+					continue
+				}
+
+				subscriber = newSub
+				currentAddr = newAddr
+				log.Printf("[health] Switched to %s", currentAddr)
+
+				lastMsgMu.Lock()
+				lastMsgTime = time.Now()
+				lastMsgMu.Unlock()
+
+				subMu.Unlock()
+			}
+		}
+	}()
 
 	go func() {
 		for {
-			msg, err := subscriber.Recv(0)
+			subMu.Lock()
+			sub := subscriber
+			subMu.Unlock()
+
+			msg, err := sub.Recv(0)
 			if err != nil {
+				log.Printf("[zmq] Recv error: %v — retrying in 1s", err)
+				time.Sleep(1 * time.Second)
 				continue
 			}
+
+			lastMsgMu.Lock()
+			lastMsgTime = time.Now()
+			lastMsgMu.Unlock()
 
 			parts := strings.SplitN(msg, ":", 2)
 			if len(parts) != 2 {
@@ -328,15 +408,26 @@ func processAndBroadcastBlock(batch *PendingBlockBatch) {
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
+	select {
+	case connSemaphore <- struct{}{}:
+	default:
+		http.Error(w, "Too many connections", http.StatusServiceUnavailable)
 		return
 	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		<-connSemaphore
+		return
+	}
+
 	wsMutex.Lock()
 	clients[conn] = true
 	wsMutex.Unlock()
 
 	go func(c *websocket.Conn) {
+		defer func() { <-connSemaphore }()
+
 		ticker := time.NewTicker(50 * time.Second)
 		defer ticker.Stop()
 		for {

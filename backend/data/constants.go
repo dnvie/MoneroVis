@@ -1,7 +1,5 @@
 package data
 
-const Username = "" // Optional
-const Password = "" // Optional
-const Node = "http://node.monerovis.com"
-const DecoyApiUrl = "https://decoy.monerovis.com"
-const DatagenBaseURL = "https://api.monerovis.workers.dev"
+const Username = "" // Optional (Set only when using a remote node with --rpc-login enabled)
+const Password = "" //
+const DatagenBaseURL = "http://localhost:8081"

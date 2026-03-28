@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,15 +14,15 @@ import (
 	"github.com/icholy/digest"
 
 	"github.com/dnvie/MoneroVis/backend/data"
+	"github.com/dnvie/MoneroVis/shared"
 )
 
 type Client struct {
-	RPCURL string
+	pool   *shared.NodePool
 	client *http.Client
 }
 
-func NewClient() *Client {
-
+func NewClient(pool *shared.NodePool) *Client {
 	transport := &digest.Transport{
 		Username: data.Username,
 		Password: data.Password,
@@ -31,30 +30,73 @@ func NewClient() *Client {
 
 	httpClient := &http.Client{
 		Transport: transport,
+		Timeout:   10 * time.Second,
 	}
 
 	return &Client{
-		RPCURL: data.Node,
+		pool:   pool,
 		client: httpClient,
 	}
 }
 
-func (c *Client) GetBlock(height uint64) (*data.GetBlockResponse, error) {
+func (c *Client) doPost(endpoint string, payload any) (*http.Response, error) {
+	var body []byte
+	var err error
 
+	if payload != nil {
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal payload: %w", err)
+		}
+	}
+
+	var resp *http.Response
+	var reqErr error
+	var url string
+
+	for range 3 {
+		url, reqErr = c.pool.Get()
+		if reqErr != nil {
+			return nil, fmt.Errorf("pool exhausted: %w", reqErr)
+		}
+
+		if payload != nil {
+			reqBody := bytes.NewBuffer(body)
+			resp, reqErr = c.client.Post(url+endpoint, "application/json", reqBody)
+		} else {
+			resp, reqErr = c.client.Post(url+endpoint, "application/json", nil)
+		}
+
+		if reqErr != nil {
+			c.pool.ReportFailure(url, reqErr)
+			log.Printf("[Warning] Node %s failed (%s): %v. Retrying...", url, endpoint, reqErr)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			c.pool.ReportFailure(url, fmt.Errorf("bad HTTP status: %d", resp.StatusCode))
+			resp.Body.Close()
+			log.Printf("[Warning] Node %s returned status %d for %s. Retrying...", url, resp.StatusCode, endpoint)
+			continue
+		}
+
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("all retries failed for %s. Last error: %v", endpoint, reqErr)
+}
+
+func (c *Client) GetBlock(height uint64) (*data.GetBlockResponse, error) {
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "0",
 		"method":  "get_block",
 		"params":  map[string]uint64{"height": height},
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal block payload: %w", err)
-	}
 
-	resp, err := c.client.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(body))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post block request: %w", err)
+		return nil, fmt.Errorf("failed to get block: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -71,21 +113,16 @@ func (c *Client) GetBlock(height uint64) (*data.GetBlockResponse, error) {
 }
 
 func (c *Client) GetBlockByHash(hash string) (*data.GetBlockResponse, error) {
-
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "0",
 		"method":  "get_block",
 		"params":  map[string]string{"hash": hash},
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal block payload: %w", err)
-	}
 
-	resp, err := c.client.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(body))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post block request: %w", err)
+		return nil, fmt.Errorf("failed to get block by hash: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -101,142 +138,14 @@ func (c *Client) GetBlockByHash(hash string) (*data.GetBlockResponse, error) {
 	return &result, nil
 }
 
-func (c *Client) GetRawMinimalTransactions(hashes []string) ([]data.RawMinimalTransaction, error) {
-
-	if len(hashes) == 0 {
-		// No txs
-		return nil, nil
-	}
-
-	payload := map[string]any{
-		"txs_hashes":     hashes,
-		"decode_as_json": true,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal block payload: %w", err)
-	}
-
-	resp, err := c.client.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to post block request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode transactions response: %w", err)
-	}
-
-	if status, ok := result["status"].(string); !ok || status != "OK" {
-		return nil, fmt.Errorf("get_transactions status not OK: %v", result)
-	}
-
-	rawTxHex, ok := result["txs_as_hex"]
-	if !ok {
-		return nil, fmt.Errorf("txs_as_hex missing from response")
-	}
-
-	txHexSlice, ok := rawTxHex.([]string)
-
-	if !ok {
-		anySlice, ok := rawTxHex.([]any)
-		if !ok {
-			return nil, fmt.Errorf("txs_as_hex is not []string or []any, but type %T", rawTxHex)
-		}
-
-		txHexSlice = make([]string, 0, len(anySlice))
-		for i, v := range anySlice {
-			strVal, ok := v.(string)
-			if !ok {
-				return nil, fmt.Errorf("element %d in txs_as_hex is not a string, but type %T", i, v)
-			}
-			txHexSlice = append(txHexSlice, strVal)
-		}
-	}
-
-	sizes := make([]float64, len(hashes))
-
-	for i, hexString := range txHexSlice {
-		binaryData, err := hex.DecodeString(hexString)
-		if err != nil {
-			fmt.Printf("  Error decoding hex: %v", err)
-			continue
-		}
-		sizes[i] = float64(len(binaryData)) / 1024.0
-	}
-
-	rawTxsInterface, ok := result["txs_as_json"]
-	if !ok {
-		return nil, fmt.Errorf("txs_as_json missing from response")
-	}
-
-	txsAsJSON, ok := rawTxsInterface.([]any)
-	if !ok {
-		return nil, fmt.Errorf("txs_as_json is not an array of strings")
-	}
-
-	var minimalTransactions []data.RawMinimalTransaction
-	for _, txJSONStr := range txsAsJSON {
-		txStr, ok := txJSONStr.(string)
-		if !ok {
-			return nil, fmt.Errorf("element in txs_as_json is not a string")
-		}
-
-		var tx data.RawMinimalTransaction
-		if err := json.Unmarshal([]byte(txStr), &tx); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal single transaction from txs_as_json: %w", err)
-		}
-		minimalTransactions = append(minimalTransactions, tx)
-	}
-
-	if len(hashes) != len(minimalTransactions) {
-		log.Printf("Warning: Number of returned transactions (%d) does not match requested hashes (%d)", len(minimalTransactions), len(hashes))
-	}
-
-	for i := range minimalTransactions {
-		if i < len(hashes) {
-			minimalTransactions[i].Hash = hashes[i]
-		}
-		minimalTransactions[i].Size = sizes[i]
-		fee := minimalTransactions[i].RCTSignatures.TxnFee
-		if fee == 0 {
-			var inSum uint64 = 0
-			for _, in := range minimalTransactions[i].Vin {
-				inSum += in.Key.Amount
-			}
-			var outSum uint64 = 0
-			for _, out := range minimalTransactions[i].Vout {
-				outSum += out.Amount
-			}
-			if inSum > outSum {
-				fee = inSum - outSum
-			}
-		}
-
-		minimalTransactions[i].Fee = fee
-		minimalTransactions[i].NumInputs = len(minimalTransactions[i].Vin)
-		minimalTransactions[i].NumOutputs = len(minimalTransactions[i].Vout)
-	}
-
-	return minimalTransactions, nil
-}
-
 func (c *Client) GetMinerTransactionSize(hash string) (float64, error) {
-	hashes := make([]string, 1)
-	hashes[0] = hash
-
 	payload := map[string]any{
-		"txs_hashes": hashes,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return 0, fmt.Errorf("failed to marshal payload: %w", err)
+		"txs_hashes": []string{hash},
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(body))
+	resp, err := c.doPost("/get_transactions", payload)
 	if err != nil {
-		return 0, fmt.Errorf("failed to post request: %w", err)
+		return 0, fmt.Errorf("failed to get miner transaction size: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -259,20 +168,14 @@ func (c *Client) GetMinerTransactionSize(hash string) (float64, error) {
 }
 
 func (c *Client) GetTransaction(hash string) (*data.Tx, error) {
-	hashes := []string{hash}
-
 	payload := map[string]any{
-		"txs_hashes":     hashes,
+		"txs_hashes":     []string{hash},
 		"decode_as_json": true,
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal transaction payload: %w", err)
-	}
 
-	resp, err := c.client.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(body))
+	resp, err := c.doPost("/get_transactions", payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post transaction request: %w", err)
+		return nil, fmt.Errorf("failed to get transaction: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -297,86 +200,246 @@ func (c *Client) GetTransactions(hashes []string) ([]data.Tx, error) {
 		return nil, nil
 	}
 
-	payload := map[string]any{
-		"txs_hashes":     hashes,
-		"decode_as_json": true,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal transaction payload: %w", err)
+	var allTxs []data.Tx
+	batchSize := 50
+
+	for i := 0; i < len(hashes); i += batchSize {
+		end := min(i+batchSize, len(hashes))
+		batch := hashes[i:end]
+
+		payload := map[string]any{
+			"txs_hashes":     batch,
+			"decode_as_json": true,
+		}
+
+		resp, err := c.doPost("/get_transactions", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get transactions batch: %w", err)
+		}
+
+		var result data.NodeResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode transaction response: %w", decodeErr)
+		}
+
+		if result.Status != "OK" {
+			return nil, fmt.Errorf("get_transactions status not OK: %v", result.Status)
+		}
+
+		allTxs = append(allTxs, result.Txs...)
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/get_transactions", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to post transaction request: %w", err)
-	}
-	defer resp.Body.Close()
+	return allTxs, nil
+}
 
-	var result data.NodeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode transaction response: %w", err)
+func (c *Client) GetRawMinimalTransactions(hashes []string) ([]data.RawMinimalTransaction, error) {
+	if len(hashes) == 0 {
+		return nil, nil
 	}
 
-	if result.Status != "OK" {
-		return nil, fmt.Errorf("get_transactions status not OK: %v", result.Status)
+	var allMinimalTxs []data.RawMinimalTransaction
+	batchSize := 50
+
+	for i := 0; i < len(hashes); i += batchSize {
+		end := min(i+batchSize, len(hashes))
+		batch := hashes[i:end]
+
+		payload := map[string]any{
+			"txs_hashes":     batch,
+			"decode_as_json": true,
+		}
+
+		resp, err := c.doPost("/get_transactions", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get minimal transactions batch: %w", err)
+		}
+
+		var result map[string]any
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode transactions response: %w", decodeErr)
+		}
+
+		if status, ok := result["status"].(string); !ok || status != "OK" {
+			return nil, fmt.Errorf("get_transactions status not OK: %v", result)
+		}
+
+		rawTxHex, ok := result["txs_as_hex"]
+		if !ok {
+			return nil, fmt.Errorf("txs_as_hex missing from response")
+		}
+
+		txHexSlice, ok := rawTxHex.([]string)
+		if !ok {
+			anySlice, ok := rawTxHex.([]any)
+			if !ok {
+				return nil, fmt.Errorf("txs_as_hex is not []string or []any")
+			}
+			txHexSlice = make([]string, 0, len(anySlice))
+			for _, v := range anySlice {
+				strVal, ok := v.(string)
+				if !ok {
+					return nil, fmt.Errorf("element in txs_as_hex is not a string")
+				}
+				txHexSlice = append(txHexSlice, strVal)
+			}
+		}
+
+		sizes := make([]float64, len(batch))
+		for j, hexString := range txHexSlice {
+			binaryData, err := hex.DecodeString(hexString)
+			if err != nil {
+				fmt.Printf("  Error decoding hex: %v", err)
+				continue
+			}
+			sizes[j] = float64(len(binaryData)) / 1024.0
+		}
+
+		rawTxsInterface, ok := result["txs_as_json"]
+		if !ok {
+			return nil, fmt.Errorf("txs_as_json missing from response")
+		}
+
+		txsAsJSON, ok := rawTxsInterface.([]any)
+		if !ok {
+			return nil, fmt.Errorf("txs_as_json is not an array of strings")
+		}
+
+		var batchMinimalTxs []data.RawMinimalTransaction
+		for _, txJSONStr := range txsAsJSON {
+			txStr, ok := txJSONStr.(string)
+			if !ok {
+				return nil, fmt.Errorf("element in txs_as_json is not a string")
+			}
+
+			var tx data.RawMinimalTransaction
+			if err := json.Unmarshal([]byte(txStr), &tx); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal single transaction: %w", err)
+			}
+			batchMinimalTxs = append(batchMinimalTxs, tx)
+		}
+
+		for j := range batchMinimalTxs {
+			if j < len(batch) {
+				batchMinimalTxs[j].Hash = batch[j]
+			}
+			batchMinimalTxs[j].Size = sizes[j]
+			fee := batchMinimalTxs[j].RCTSignatures.TxnFee
+			if fee == 0 {
+				var inSum uint64 = 0
+				for _, in := range batchMinimalTxs[j].Vin {
+					inSum += in.Key.Amount
+				}
+				var outSum uint64 = 0
+				for _, out := range batchMinimalTxs[j].Vout {
+					outSum += out.Amount
+				}
+				if inSum > outSum {
+					fee = inSum - outSum
+				}
+			}
+
+			batchMinimalTxs[j].Fee = fee
+			batchMinimalTxs[j].NumInputs = len(batchMinimalTxs[j].Vin)
+			batchMinimalTxs[j].NumOutputs = len(batchMinimalTxs[j].Vout)
+		}
+
+		allMinimalTxs = append(allMinimalTxs, batchMinimalTxs...)
 	}
 
-	return result.Txs, nil
+	return allMinimalTxs, nil
 }
 
 func (c *Client) GetOuts(indices []int, amount int) (*data.GetOutsResponse, error) {
-	outputs := make([]map[string]any, len(indices))
-	for i, index := range indices {
-		outputs[i] = map[string]any{"amount": amount, "index": index}
+	if len(indices) == 0 {
+		return &data.GetOutsResponse{Status: "OK"}, nil
 	}
 
-	payload := map[string]any{"outputs": outputs, "get_txid": true}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal get_outs payload: %w", err)
+	var combinedResponse *data.GetOutsResponse
+	batchSize := 500
+
+	for i := 0; i < len(indices); i += batchSize {
+		end := min(i+batchSize, len(indices))
+		batch := indices[i:end]
+
+		outputs := make([]map[string]any, len(batch))
+		for j, index := range batch {
+			outputs[j] = map[string]any{"amount": amount, "index": index}
+		}
+
+		payload := map[string]any{"outputs": outputs, "get_txid": true}
+
+		resp, err := c.doPost("/get_outs", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get outs batch: %w", err)
+		}
+
+		var result data.GetOutsResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode get_outs response: %w", decodeErr)
+		}
+
+		if result.Status != "OK" {
+			return nil, fmt.Errorf("get_outs status not OK: %s", result.Status)
+		}
+
+		if combinedResponse == nil {
+			combinedResponse = &result
+		} else {
+			combinedResponse.Outs = append(combinedResponse.Outs, result.Outs...)
+		}
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/get_outs", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to post get_outs request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result data.GetOutsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode get_outs response: %w", err)
-	}
-
-	if result.Status != "OK" {
-		return nil, fmt.Errorf("get_outs status not OK: %s", result.Status)
-	}
-
-	return &result, nil
+	return combinedResponse, nil
 }
 
 func (c *Client) GetOutsMixed(reqs []data.OutRequest) (*data.GetOutsResponse, error) {
-	payload := map[string]any{"outputs": reqs, "get_txid": true}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal get_outs payload: %w", err)
+	if len(reqs) == 0 {
+		return &data.GetOutsResponse{Status: "OK"}, nil
 	}
 
-	resp, err := c.client.Post(c.RPCURL+"/get_outs", "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to post get_outs request: %w", err)
-	}
-	defer resp.Body.Close()
+	var combinedResponse *data.GetOutsResponse
+	batchSize := 500
 
-	var result data.GetOutsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode get_outs response: %w", err)
+	for i := 0; i < len(reqs); i += batchSize {
+		end := min(i+batchSize, len(reqs))
+		batch := reqs[i:end]
+
+		payload := map[string]any{"outputs": batch, "get_txid": true}
+
+		resp, err := c.doPost("/get_outs", payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get outs mixed batch: %w", err)
+		}
+
+		var result data.GetOutsResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode get_outs response: %w", decodeErr)
+		}
+
+		if result.Status != "OK" {
+			return nil, fmt.Errorf("get_outs status not OK: %s", result.Status)
+		}
+
+		if combinedResponse == nil {
+			combinedResponse = &result
+		} else {
+			combinedResponse.Outs = append(combinedResponse.Outs, result.Outs...)
+		}
 	}
 
-	if result.Status != "OK" {
-		return nil, fmt.Errorf("get_outs status not OK: %s", result.Status)
-	}
-
-	return &result, nil
+	return combinedResponse, nil
 }
 
 func (c *Client) GetDecoyCounts(ids []int) (map[string]int, error) {
@@ -384,7 +447,7 @@ func (c *Client) GetDecoyCounts(ids []int) (map[string]int, error) {
 		return make(map[string]int), nil
 	}
 
-	baseURL := data.DecoyApiUrl + "/decoy_count"
+	baseURL := data.DatagenBaseURL + "/decoy_count"
 
 	idStrs := make([]string, len(ids))
 	for i, id := range ids {
@@ -400,9 +463,6 @@ func (c *Client) GetDecoyCounts(ids []int) (map[string]int, error) {
 	q := req.URL.Query()
 	q.Add("ids", idsParam)
 	req.URL.RawQuery = q.Encode()
-
-	req.Header.Add("CF-Access-Client-Id", "14c19c30a7bf7d9edcc659fe4e2f265a.access")
-	req.Header.Add("CF-Access-Client-Secret", "f9a401094aa49114fe7a97daa2edb9947bea88654203971bfbf1d884b76510e8")
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.Do(req)
@@ -437,32 +497,29 @@ func (c *Client) GetCoinbaseStatus(hashes []string) (map[string]bool, error) {
 		}
 	}
 
-	coinbaseMap := make(map[string]bool)
-	batchSize := 50
+	payload := map[string]any{
+		"hashes": uniqueHashes,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal coinbase payload: %w", err)
+	}
 
-	for i := 0; i < len(uniqueHashes); i += batchSize {
-		end := min(i+batchSize, len(uniqueHashes))
-		batch := uniqueHashes[i:end]
+	url := fmt.Sprintf("%s/is_coinbase", data.DatagenBaseURL)
 
-		hashesParam := strings.Join(batch, ",")
-		url := fmt.Sprintf("%s/is_coinbase?hashes=%s", data.DatagenBaseURL, hashesParam)
+	resp, err := c.client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call is_coinbase: %w", err)
+	}
+	defer resp.Body.Close()
 
-		resp, err := c.client.Get(url)
-		if err != nil {
-			return nil, fmt.Errorf("failed to call is_coinbase for batch %d: %w", i, err)
-		}
-		defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("is_coinbase returned non-200 status: %s", resp.Status)
+	}
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("is_coinbase returned non-200 status: %s", resp.Status)
-		}
-
-		var batchResult map[string]bool
-		if err := json.NewDecoder(resp.Body).Decode(&batchResult); err != nil {
-			return nil, fmt.Errorf("failed to decode response for batch %d: %w", i, err)
-		}
-
-		maps.Copy(coinbaseMap, batchResult)
+	var coinbaseMap map[string]bool
+	if err := json.NewDecoder(resp.Body).Decode(&coinbaseMap); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	return coinbaseMap, nil
@@ -474,14 +531,10 @@ func (c *Client) GetInfo() (*data.GetInfoResponse, error) {
 		"id":      "0",
 		"method":  "get_info",
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal get_info payload: %w", err)
-	}
 
-	resp, err := c.client.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(body))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post get_info request: %w", err)
+		return nil, fmt.Errorf("failed to get info: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -507,14 +560,10 @@ func (c *Client) GetBlockHeadersRange(startHeight, endHeight uint64) (*data.GetB
 			"end_height":   endHeight,
 		},
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal get_block_headers_range payload: %w", err)
-	}
 
-	resp, err := c.client.Post(c.RPCURL+"/json_rpc", "application/json", bytes.NewBuffer(body))
+	resp, err := c.doPost("/json_rpc", payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post get_block_headers_range request: %w", err)
+		return nil, fmt.Errorf("failed to get block headers range: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -531,9 +580,9 @@ func (c *Client) GetBlockHeadersRange(startHeight, endHeight uint64) (*data.GetB
 }
 
 func (c *Client) GetTransactionPool() (*data.GetTransactionPoolResponse, error) {
-	resp, err := c.client.Post(c.RPCURL+"/get_transaction_pool", "application/json", nil)
+	resp, err := c.doPost("/get_transaction_pool", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post get_transaction_pool request: %w", err)
+		return nil, fmt.Errorf("failed to get transaction pool: %w", err)
 	}
 	defer resp.Body.Close()
 

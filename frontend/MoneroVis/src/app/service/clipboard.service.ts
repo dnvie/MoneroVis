@@ -25,8 +25,8 @@ export interface HashboardTab {
   items: ClipboardItem[];
 }
 
-const baseUrl = 'https://api.monerovis.workers.dev';
-const backendUrl = 'https://api.monerovis.com';
+const baseUrl = 'http://localhost:8081';
+const backendUrl = 'http://localhost:8080';
 
 @Injectable({
   providedIn: 'root',

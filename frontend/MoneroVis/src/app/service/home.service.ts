@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { HomeData } from '../data/home';
 
-const baseUrl = 'https://api.monerovis.com';
+const baseUrl = 'http://localhost:8080';
 
 @Injectable({
   providedIn: 'root',

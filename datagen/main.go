@@ -11,14 +11,21 @@ import (
 	"github.com/dnvie/MoneroVis/datagen/inputs"
 	"github.com/dnvie/MoneroVis/datagen/outputs"
 	"github.com/dnvie/MoneroVis/datagen/ring_members"
+	"github.com/dnvie/MoneroVis/shared"
 )
 
 func runGenerate(isPi bool) {
 	db := database.InitDb(isPi)
 	defer db.Close()
 
-	outputs.Generate(isPi, db)
-	inputs.Generate(isPi, db)
+	pool := shared.NewNodePool(shared.DefaultNodes())
+	pool.StartHealthChecks(30 * time.Second)
+
+	client := outputs.NewClient(pool)
+	defer client.Close()
+
+	outputs.Generate(isPi, db, client)
+	inputs.Generate(isPi, db, client)
 	ring_members.Generate(isPi, db)
 }
 
