@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,9 +15,14 @@ import (
 	"github.com/dnvie/MoneroVis/datagen/client"
 	"github.com/dnvie/MoneroVis/datagen/database"
 	"github.com/dnvie/MoneroVis/datagen/decoys"
-	"github.com/dnvie/MoneroVis/shared"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+)
+
+const (
+	defaultNodeURL  = "http://localhost:18081"
+	defaultNodeUser = ""
+	defaultNodePass = ""
 )
 
 type App struct {
@@ -404,16 +410,27 @@ func quietLogger(next http.Handler) http.Handler {
 }
 
 func main() {
+	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	nodeURL := flags.String("node-url", defaultNodeURL, "Monero node RPC URL")
+	nodeUser := flags.String("node-user", defaultNodeUser, "Monero node RPC username")
+	nodePass := flags.String("node-pass", defaultNodePass, "Monero node RPC password")
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "Usage: go run main.go [--node-url URL] [--node-user USER] [--node-pass PASS] [pi]\n")
+		flags.PrintDefaults()
+	}
+	flags.Parse(os.Args[1:])
 
 	isPi := false
-
-	if len(os.Args) > 1 {
-		if os.Args[1] == "pi" {
-			isPi = true
-		} else {
-			fmt.Println("Usage: go run main.go [pi]")
-			os.Exit(1)
-		}
+	args := flags.Args()
+	if len(args) > 1 || (len(args) == 1 && args[0] != "pi") {
+		flags.Usage()
+		os.Exit(1)
+	}
+	if len(args) == 1 && args[0] == "pi" {
+		isPi = true
+	}
+	if strings.TrimSpace(*nodeURL) == "" {
+		log.Fatal("node-url must not be empty")
 	}
 
 	db := database.InitDb(isPi)
@@ -430,9 +447,7 @@ func main() {
 
 	defer db.Close()
 
-	pool := shared.NewNodePool(shared.DefaultNodes())
-	pool.StartHealthChecks(30 * time.Second)
-	rpcClient := client.NewClient(pool)
+	rpcClient := client.NewClient(*nodeURL, *nodeUser, *nodePass, isPi)
 
 	app := &App{
 		DB:     db,
@@ -446,7 +461,6 @@ func main() {
 		AllowedOrigins: []string{
 			"http://localhost:4200",
 			"http://127.0.0.1:4200",
-			"http://192.168.1.158:4200",
 			"https://www.monerovis.com",
 			"https://*.monerovis.com",
 			"https://monerovis.com",

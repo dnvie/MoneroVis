@@ -169,18 +169,27 @@
 
 .tooltip {
   position: absolute;
-  background: var(--mempoolTooltipBackground);
-  border: 1px solid var(--mempoolTooltipBorder);
-  padding: 12px;
-  border-radius: 4px;
+  background-color: rgba(40, 40, 40, 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
   pointer-events: none;
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0;
-  box-shadow: 0 4px 15px var(--mempoolTooltipShadow);
-  font-family: 'Inter Tight', sans-serif;
   z-index: 100;
-  color: var(--mempoolTooltipText);
-  transition: opacity 0.1s;
+  transition: opacity 0.1s ease-out;
+  white-space: pre-wrap;
+  word-break: break-all;
+  width: fit-content;
+  height: fit-content;
+  max-width: 450px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  font-family: 'Google Sans Code', monospace;
+  font-weight: 200;
 }
 
 @keyframes pulse {

@@ -3,6 +3,7 @@ package outputs
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 )
 
 func FindMaxOutputIndex(client *Client, start uint64) uint64 {
@@ -40,17 +41,17 @@ func probeOutputIndex(client *Client, index uint64) bool {
 		return false
 	}
 
-	url, rpcerr := client.pool.Get()
-	if rpcerr != nil {
-		return false
-	}
-
-	resp, err := client.client.Post(url+"/get_outs", "application/json", bytes.NewBuffer(body))
+	client.rpcMu.Lock()
+	resp, err := client.client.Post(client.RPCURL+"/get_outs", "application/json", bytes.NewBuffer(body))
+	client.rpcMu.Unlock()
 	if err != nil {
-		client.pool.ReportFailure(url, err)
 		return false
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
 
 	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

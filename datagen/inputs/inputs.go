@@ -50,7 +50,10 @@ func Generate(isPi bool, db *sql.DB, client *outputs.Client) {
 		return
 	}
 
-	const numWorkers = 8
+	numWorkers := 8
+	if isPi {
+		numWorkers = 2
+	}
 	jobs := make(chan uint64, numWorkers*2)
 	results := make(chan BlockBatch, numWorkers*2)
 
@@ -189,7 +192,8 @@ func getAllTxsFromBlock(block map[string]any) []string {
 	for _, h := range rawHashes {
 		hash, ok := h.(string)
 		if !ok {
-			log.Fatalf("tx_hashes contains non-string element")
+			log.Printf("[Warning] tx_hashes contains non-string element, skipping")
+			continue
 		}
 		allTxs = append(allTxs, hash)
 	}
@@ -209,13 +213,15 @@ func ExtractKeyOffsets(txs map[string]map[string]any) map[string][]InputOffsets 
 
 		vinArray, ok := rawVin.([]any)
 		if !ok {
-			log.Fatalf("Fatal Error: Transaction %s 'vin' is not an array type (%T). Expected []any.", txHash, rawVin)
+			log.Printf("[Warning] Transaction %s 'vin' is not an array type (%T). Skipping.", txHash, rawVin)
+			continue
 		}
 
 		for _, rawInput := range vinArray {
 			inputMap, ok := rawInput.(map[string]any)
 			if !ok {
-				log.Fatalf("Fatal Error: Transaction %s input is not a map type. Expected map[string]any.", txHash)
+				log.Printf("[Warning] Transaction %s input is not a map type. Skipping input.", txHash)
+				continue
 			}
 
 			rawKey, ok := inputMap["key"]
@@ -225,7 +231,8 @@ func ExtractKeyOffsets(txs map[string]map[string]any) map[string][]InputOffsets 
 
 			keyMap, ok := rawKey.(map[string]any)
 			if !ok {
-				log.Fatalf("Fatal Error: Transaction %s input 'key' exists but is not a map type.", txHash)
+				log.Printf("[Warning] Transaction %s input 'key' exists but is not a map type. Skipping.", txHash)
+				continue
 			}
 
 			rawOffsets, ok := keyMap["key_offsets"]
@@ -235,16 +242,24 @@ func ExtractKeyOffsets(txs map[string]map[string]any) map[string][]InputOffsets 
 
 			offsetsArray, ok := rawOffsets.([]any)
 			if !ok {
-				log.Fatalf("Fatal Error: Transaction %s 'key_offsets' is not an array type.", txHash)
+				log.Printf("[Warning] Transaction %s 'key_offsets' is not an array type. Skipping.", txHash)
+				continue
 			}
 
 			var currentInputOffsets []uint64
+			validOffsets := true
 			for _, rawOffset := range offsetsArray {
 				offsetFloat, ok := rawOffset.(float64)
 				if !ok {
-					log.Fatalf("Fatal Error: Transaction %s offset is not a float64.", txHash)
+					log.Printf("[Warning] Transaction %s offset is not a float64. Skipping input.", txHash)
+					validOffsets = false
+					break
 				}
 				currentInputOffsets = append(currentInputOffsets, uint64(offsetFloat))
+			}
+
+			if !validOffsets {
+				continue
 			}
 
 			txInputOffsets = append(txInputOffsets, InputOffsets{

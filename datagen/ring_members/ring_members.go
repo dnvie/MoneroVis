@@ -55,10 +55,15 @@ func Generate(isPi bool, db *sql.DB) {
 	}
 	fmt.Printf("Resuming ring member generation from input_id %d (max %d)\n", startID, maxInputID)
 
-	jobs := make(chan []InputRing, 10)
-	results := make(chan []RingMember, 10)
-
 	numWorkers := runtime.NumCPU()
+	batchSize := uint64(100_000)
+	if isPi {
+		numWorkers = min(numWorkers, 2)
+		batchSize = 10_000
+	}
+	jobs := make(chan []InputRing, numWorkers)
+	results := make(chan []RingMember, numWorkers)
+
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 	for range numWorkers {
@@ -141,7 +146,6 @@ func Generate(isPi bool, db *sql.DB) {
 		}
 	})
 
-	const batchSize = 100_000
 	for start := startID; start <= maxInputID; start += batchSize {
 		end := min(start+batchSize-1, maxInputID)
 

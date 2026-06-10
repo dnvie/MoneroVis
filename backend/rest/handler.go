@@ -15,7 +15,6 @@ func Serve(h *ApiHandler) {
 		AllowedOrigins: []string{
 			"http://localhost:4200",
 			"http://127.0.0.1:4200",
-			"http://192.168.1.158:4200",
 			"https://www.monerovis.com",
 			"https://*.monerovis.com",
 			"https://monerovis.com",

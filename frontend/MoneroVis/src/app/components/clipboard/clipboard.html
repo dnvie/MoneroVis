@@ -50,11 +50,7 @@
   <div class="sheet-content">
     <ng-container *ngIf="service.automatedResults() as results">
       <div *ngFor="let group of results; let i = index" class="group-section">
-        <div
-          class="group-header"
-          [style.border-left-color]="automatedResultColors()[i]"
-          (click)="toggleGroupCollapse('consolidation-' + i)"
-        >
+        <div class="group-header" (click)="toggleGroupCollapse('consolidation-' + i)">
           <span class="arrow-icon" [class.collapsed]="isCollapsed('consolidation-' + i)">▼</span>
           <span class="group-name" [style.color]="automatedResultColors()[i]">
             @if (i === 0) { Initial Transactions } @else { Consolidation {{ i }} }

@@ -1,19 +1,26 @@
 package main
 
 import (
-	"time"
+	"flag"
+	"log"
+	"strings"
 
 	"github.com/dnvie/MoneroVis/backend/client"
+	"github.com/dnvie/MoneroVis/backend/data"
 	"github.com/dnvie/MoneroVis/backend/rest"
-	"github.com/dnvie/MoneroVis/shared"
 )
 
 func main() {
-	pool := shared.NewNodePool(shared.DefaultNodes())
-	pool.StartHealthChecks(30 * time.Second)
+	nodeURL := flag.String("node-url", data.DefaultNodeURL, "Monero node RPC URL")
+	nodeUser := flag.String("node-user", data.DefaultNodeUser, "Monero node RPC username")
+	nodePass := flag.String("node-pass", data.DefaultNodePass, "Monero node RPC password")
+	flag.Parse()
 
-	client := client.NewClient(pool)
+	if strings.TrimSpace(*nodeURL) == "" {
+		log.Fatal("node-url must not be empty")
+	}
+
+	client := client.NewClient(*nodeURL, *nodeUser, *nodePass)
 	apiHandler := rest.NewApiHandler(client)
 	rest.Serve(apiHandler)
-
 }

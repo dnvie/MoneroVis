@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -12,6 +13,14 @@ func InitDb(isPi bool) *sql.DB {
 	if err != nil {
 		log.Fatalf("Failed to open SQLite database: %v", err)
 	}
+	if isPi {
+		db.SetMaxOpenConns(4)
+		db.SetMaxIdleConns(2)
+	} else {
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+	}
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	var pragmas []string
 	if isPi {
@@ -20,10 +29,10 @@ func InitDb(isPi bool) *sql.DB {
 			"PRAGMA journal_mode=WAL;",
 			"PRAGMA synchronous=NORMAL;",
 			"PRAGMA busy_timeout = 5000;",
-			"PRAGMA cache_size=-512000;",
-			"PRAGMA mmap_size=2000000000;",
+			"PRAGMA cache_size=-131072;",
+			"PRAGMA mmap_size=536870912;",
 			"PRAGMA foreign_keys=ON;",
-			"PRAGMA wal_autocheckpoint=4000;",
+			"PRAGMA wal_autocheckpoint=1000;",
 			"PRAGMA page_size=8192;",
 		}
 	} else {

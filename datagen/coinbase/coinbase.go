@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/dnvie/MoneroVis/datagen/client"
-	"github.com/dnvie/MoneroVis/shared"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,14 +16,18 @@ const (
 	batchSize = 1000
 )
 
-func Start(db *sql.DB) {
-	c := client.NewClient(shared.NewNodePool(shared.DefaultNodes()))
+func Start(db *sql.DB, nodeURL, username, password string, isPi bool) {
+	c := client.NewClient(nodeURL, username, password, isPi)
+	syncBatchSize := uint64(batchSize)
+	if isPi {
+		syncBatchSize = 250
+	}
 
 	log.Println("Starting Coinbase Tracker...")
 
 	log.Println("Performing initial sync...")
 	for {
-		synced, err := Init(db, c)
+		synced, err := Init(db, c, syncBatchSize)
 		if err != nil {
 			log.Printf("Initial sync warning: %v. Retrying in 5s...", err)
 			time.Sleep(5 * time.Second)
@@ -41,13 +44,13 @@ func Start(db *sql.DB) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if _, err := Init(db, c); err != nil {
+		if _, err := Init(db, c, syncBatchSize); err != nil {
 			log.Printf("Periodic sync error: %v", err)
 		}
 	}
 }
 
-func Init(db *sql.DB, c *client.Client) (bool, error) {
+func Init(db *sql.DB, c *client.Client, batchSize uint64) (bool, error) {
 	var lastHeight uint64
 	var startHeight uint64
 

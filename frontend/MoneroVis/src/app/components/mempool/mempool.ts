@@ -49,7 +49,7 @@ export class Mempool implements OnInit, OnDestroy, AfterViewInit, OnChanges {
 
   private resizeObserver: ResizeObserver | undefined;
 
-  constructor(private router: Router) { }
+  constructor(private router: Router) {}
 
   ngOnInit(): void {
     this.updateStats();
@@ -138,6 +138,8 @@ export class Mempool implements OnInit, OnDestroy, AfterViewInit, OnChanges {
     const containerW = this.containerFrame.nativeElement.clientWidth;
     const containerH = this.containerFrame.nativeElement.clientHeight;
 
+    d3.select(this.tooltip.nativeElement).style('max-width', containerW + 'px');
+
     const clampedPct = Math.min(1.0, this.percentage);
     const fillWidth = Math.max(this.totalUsed > 0 ? 1 : 0, containerW * clampedPct);
     const emptyWidth = containerW - fillWidth;
@@ -204,21 +206,17 @@ export class Mempool implements OnInit, OnDestroy, AfterViewInit, OnChanges {
           (exit) => exit.call((exit) => exit.transition(t).attr('fill-opacity', 0).remove()),
         )
 
-        .on('mouseover', (event, d: any) => {
+        .on('mouseover', (event: MouseEvent, d: any) => {
           this.hoverTx.emit(d.data.hash);
-          const tooltip = d3.select(this.tooltip.nativeElement);
-          tooltip
-            .style('opacity', 1)
-            .style('border-left', `4px solid ${colorOrange}`)
-            .html(
-              `<strong>TX: ${d.data.hash.substring(0, 10)}...</strong><br/>Size: ${d.data.size.toFixed(3)} kB<br/>Fee: ${d.data.fee}`,
-            )
-            .style('left', event.pageX + 15 + 'px')
-            .style('top', event.pageY - 28 + 'px');
+          this.showTooltip(d);
+          this.moveTooltip(event);
+        })
+        .on('mousemove', (event: MouseEvent) => {
+          this.moveTooltip(event);
         })
         .on('mouseout', () => {
           this.hoverTx.emit(null);
-          d3.select(this.tooltip.nativeElement).style('opacity', 0);
+          this.hideTooltip();
         })
         .on('click', (event, d: any) => {
           this.txClick.emit(d.data.hash);
@@ -275,6 +273,64 @@ export class Mempool implements OnInit, OnDestroy, AfterViewInit, OnChanges {
       currentBytes += size;
     }
     return { children: ghosts };
+  }
+
+  private showTooltip(d: any): void {
+    d3.select(this.tooltip.nativeElement)
+      .style('opacity', 1)
+      .html(
+        `
+          <div class="tooltipHash">${d.data.hash}</div>
+          <div class="tooltipSize">Size: ${d.data.size.toFixed(4)} kB</div>
+          <div class="tooltipFee">Fee: ${d.data.fee}ɱ</div>
+        `,
+      );
+  }
+
+  private moveTooltip(event: MouseEvent): void {
+    const containerNode = this.containerFrame.nativeElement;
+    const tooltipNode = this.tooltip.nativeElement;
+
+    if (!containerNode || !tooltipNode) return;
+
+    const [mouseX, mouseY] = d3.pointer(event, containerNode);
+
+    const tooltipWidth = tooltipNode.offsetWidth;
+    const tooltipHeight = tooltipNode.offsetHeight;
+    const containerWidth = containerNode.clientWidth;
+    const containerHeight = containerNode.clientHeight;
+    const offset = 15;
+
+    let finalLeft: number;
+    let finalTop: number;
+
+    if (mouseX + offset + tooltipWidth > containerWidth) {
+      finalLeft = mouseX - offset - tooltipWidth;
+
+      if (finalLeft < 0) {
+        finalLeft = 0;
+      }
+    } else {
+      finalLeft = mouseX + offset;
+    }
+
+    if (mouseY + offset + tooltipHeight > containerHeight) {
+      finalTop = mouseY - offset - tooltipHeight;
+
+      if (finalTop < 0) {
+        finalTop = 0;
+      }
+    } else {
+      finalTop = mouseY + offset;
+    }
+
+    d3.select(tooltipNode)
+      .style('left', finalLeft + 'px')
+      .style('top', finalTop + 'px');
+  }
+
+  private hideTooltip(): void {
+    d3.select(this.tooltip.nativeElement).style('opacity', 0);
   }
 
   public navigateToGlossary(input: string) {

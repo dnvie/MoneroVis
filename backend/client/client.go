@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,18 +13,17 @@ import (
 	"github.com/icholy/digest"
 
 	"github.com/dnvie/MoneroVis/backend/data"
-	"github.com/dnvie/MoneroVis/shared"
 )
 
 type Client struct {
-	pool   *shared.NodePool
+	RPCURL string
 	client *http.Client
 }
 
-func NewClient(pool *shared.NodePool) *Client {
+func NewClient(nodeURL, username, password string) *Client {
 	transport := &digest.Transport{
-		Username: data.Username,
-		Password: data.Password,
+		Username: username,
+		Password: password,
 	}
 
 	httpClient := &http.Client{
@@ -34,7 +32,7 @@ func NewClient(pool *shared.NodePool) *Client {
 	}
 
 	return &Client{
-		pool:   pool,
+		RPCURL: strings.TrimRight(strings.TrimSpace(nodeURL), "/"),
 		client: httpClient,
 	}
 }
@@ -52,38 +50,24 @@ func (c *Client) doPost(endpoint string, payload any) (*http.Response, error) {
 
 	var resp *http.Response
 	var reqErr error
-	var url string
 
-	for range 3 {
-		url, reqErr = c.pool.Get()
-		if reqErr != nil {
-			return nil, fmt.Errorf("pool exhausted: %w", reqErr)
-		}
-
-		if payload != nil {
-			reqBody := bytes.NewBuffer(body)
-			resp, reqErr = c.client.Post(url+endpoint, "application/json", reqBody)
-		} else {
-			resp, reqErr = c.client.Post(url+endpoint, "application/json", nil)
-		}
-
-		if reqErr != nil {
-			c.pool.ReportFailure(url, reqErr)
-			log.Printf("[Warning] Node %s failed (%s): %v. Retrying...", url, endpoint, reqErr)
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			c.pool.ReportFailure(url, fmt.Errorf("bad HTTP status: %d", resp.StatusCode))
-			resp.Body.Close()
-			log.Printf("[Warning] Node %s returned status %d for %s. Retrying...", url, resp.StatusCode, endpoint)
-			continue
-		}
-
-		return resp, nil
+	if payload != nil {
+		reqBody := bytes.NewBuffer(body)
+		resp, reqErr = c.client.Post(c.RPCURL+endpoint, "application/json", reqBody)
+	} else {
+		resp, reqErr = c.client.Post(c.RPCURL+endpoint, "application/json", nil)
 	}
 
-	return nil, fmt.Errorf("all retries failed for %s. Last error: %v", endpoint, reqErr)
+	if reqErr != nil {
+		return nil, fmt.Errorf("failed to post %s to %s: %w", endpoint, c.RPCURL, reqErr)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("node returned status %d for %s", resp.StatusCode, endpoint)
+	}
+
+	return resp, nil
 }
 
 func (c *Client) GetBlock(height uint64) (*data.GetBlockResponse, error) {

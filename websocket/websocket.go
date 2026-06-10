@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,14 +20,9 @@ const (
 	MaxClients = 50
 )
 
-var connSemaphore = make(chan struct{}, MaxClients)
+const defaultNodeURL = "tcp://0.0.0.0:18083"
 
-var moneroZmqAddrs = []string{
-	"tcp://80.69.42.48:18084",
-	"tcp://88.214.26.118:18083",
-	"tcp://51.68.212.53:18084",
-	"tcp://193.24.208.109:18083",
-}
+var connSemaphore = make(chan struct{}, MaxClients)
 
 type FrontendBlock struct {
 	Height      float64  `json:"height"`
@@ -92,19 +87,6 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func pickFallback(current string) string {
-	candidates := make([]string, 0, len(moneroZmqAddrs)-1)
-	for _, addr := range moneroZmqAddrs {
-		if addr != current {
-			candidates = append(candidates, addr)
-		}
-	}
-	if len(candidates) == 0 {
-		return current
-	}
-	return candidates[rand.Intn(len(candidates))]
-}
-
 func connectSubscriber(addr string) (*zmq4.Socket, error) {
 	sub, err := zmq4.NewSocket(zmq4.SUB)
 	if err != nil {
@@ -122,7 +104,13 @@ func connectSubscriber(addr string) (*zmq4.Socket, error) {
 }
 
 func main() {
-	currentAddr := moneroZmqAddrs[0]
+	nodeURL := flag.String("node-url", defaultNodeURL, "Monero ZMQ publisher URL")
+	flag.Parse()
+
+	currentAddr := strings.TrimSpace(*nodeURL)
+	if currentAddr == "" {
+		log.Fatal("node-url must not be empty")
+	}
 
 	subscriber, err := connectSubscriber(currentAddr)
 	if err != nil {
@@ -132,61 +120,15 @@ func main() {
 	fmt.Printf("Connected to Monero Node at %s\n", currentAddr)
 	fmt.Printf("WebSocket Server running on ws://localhost:%d\n", WsPort)
 
-	var lastMsgTime time.Time = time.Now()
-	var lastMsgMu sync.Mutex
-
-	// Health checker: if no message arrives within 120s, consider the connection dead and reconnect to a fallback node.
-	var subMu sync.Mutex
-	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			lastMsgMu.Lock()
-			elapsed := time.Since(lastMsgTime)
-			lastMsgMu.Unlock()
-
-			if elapsed > 120*time.Second {
-				subMu.Lock()
-				log.Printf("[health] No messages for %.0fs from %s — switching node...", elapsed.Seconds(), currentAddr)
-				subscriber.Close()
-
-				newAddr := pickFallback(currentAddr)
-				newSub, err := connectSubscriber(newAddr)
-				if err != nil {
-					log.Printf("[health] Failed to connect to %s: %v", newAddr, err)
-					subMu.Unlock()
-					continue
-				}
-
-				subscriber = newSub
-				currentAddr = newAddr
-				log.Printf("[health] Switched to %s", currentAddr)
-
-				lastMsgMu.Lock()
-				lastMsgTime = time.Now()
-				lastMsgMu.Unlock()
-
-				subMu.Unlock()
-			}
-		}
-	}()
-
 	go func() {
 		for {
-			subMu.Lock()
-			sub := subscriber
-			subMu.Unlock()
+			msg, err := subscriber.Recv(0)
 
-			msg, err := sub.Recv(0)
 			if err != nil {
-				log.Printf("[zmq] Recv error: %v — retrying in 1s", err)
-				time.Sleep(1 * time.Second)
+				log.Printf("[zmq] Recv error from %s: %v", currentAddr, err)
+				time.Sleep(time.Second)
 				continue
 			}
-
-			lastMsgMu.Lock()
-			lastMsgTime = time.Now()
-			lastMsgMu.Unlock()
 
 			parts := strings.SplitN(msg, ":", 2)
 			if len(parts) != 2 {

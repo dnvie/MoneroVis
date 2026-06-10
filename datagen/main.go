@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dnvie/MoneroVis/datagen/coinbase"
@@ -11,17 +13,25 @@ import (
 	"github.com/dnvie/MoneroVis/datagen/inputs"
 	"github.com/dnvie/MoneroVis/datagen/outputs"
 	"github.com/dnvie/MoneroVis/datagen/ring_members"
-	"github.com/dnvie/MoneroVis/shared"
 )
 
-func runGenerate(isPi bool) {
+const (
+	defaultNodeURL  = "http://localhost:18081"
+	defaultNodeUser = ""
+	defaultNodePass = ""
+)
+
+type nodeConfig struct {
+	URL      string
+	Username string
+	Password string
+}
+
+func runGenerate(isPi bool, cfg nodeConfig) {
 	db := database.InitDb(isPi)
 	defer db.Close()
 
-	pool := shared.NewNodePool(shared.DefaultNodes())
-	pool.StartHealthChecks(30 * time.Second)
-
-	client := outputs.NewClient(pool)
+	client := outputs.NewClient(cfg.URL, cfg.Username, cfg.Password, isPi)
 	defer client.Close()
 
 	outputs.Generate(isPi, db, client)
@@ -30,12 +40,32 @@ func runGenerate(isPi bool) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go <command> [args...] [pi]")
+	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	nodeURL := flags.String("node-url", defaultNodeURL, "Monero node RPC URL")
+	nodeUser := flags.String("node-user", defaultNodeUser, "Monero node RPC username")
+	nodePass := flags.String("node-pass", defaultNodePass, "Monero node RPC password")
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "Usage: go run main.go [--node-url URL] [--node-user USER] [--node-pass PASS] <command> [args...] [pi]\n")
+		flags.PrintDefaults()
+	}
+	flags.Parse(os.Args[1:])
+
+	if flags.NArg() < 1 {
+		flags.Usage()
 		os.Exit(1)
 	}
 
-	args := os.Args[1:]
+	cfg := nodeConfig{
+		URL:      *nodeURL,
+		Username: *nodeUser,
+		Password: *nodePass,
+	}
+	if strings.TrimSpace(cfg.URL) == "" {
+		fmt.Println("Error: node-url must not be empty.")
+		os.Exit(1)
+	}
+
+	args := flags.Args()
 
 	isPi := false
 	if len(args) > 0 && args[len(args)-1] == "pi" {
@@ -53,10 +83,10 @@ func main() {
 
 	switch command {
 	case "generate":
-		runGenerate(isPi)
+		runGenerate(isPi, cfg)
 	case "autogen":
 		if len(commandArgs) != 1 {
-			fmt.Println("Usage: go run main.go autogen <minutes> [pi]")
+			fmt.Println("Usage: go run main.go [--node-url URL] [--node-user USER] [--node-pass PASS] autogen <minutes> [pi]")
 			return
 		}
 		minutes, err := strconv.Atoi(commandArgs[0])
@@ -70,13 +100,13 @@ func main() {
 
 		for {
 			fmt.Printf("--- Running generation cycle at %s ---\n", time.Now().Format("2006-01-02 15:04:05"))
-			runGenerate(isPi)
+			runGenerate(isPi, cfg)
 			fmt.Printf("--- Cycle complete. Next run in %s at %s ---\n\n", interval, time.Now().Add(interval).Format("2006-01-02 15:04:05"))
 			time.Sleep(interval)
 		}
 	case "coinbase":
 		db := database.InitDb(isPi)
-		coinbase.Start(db)
+		coinbase.Start(db, cfg.URL, cfg.Username, cfg.Password, isPi)
 	default:
 		fmt.Println("Unknown command:", command)
 		os.Exit(1)

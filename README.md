@@ -78,7 +78,25 @@ MoneroVis is implemented as a small microservice-based system consisting of a fr
 ### Prerequisites:
 - Go 1.26
 - Angular 20.3+
-- Nice to have but not necessary: Access to an unrestricted Monero Node with ZMQ enabled (ideally a local full-node)
+- Access to an unrestricted Monero node RPC endpoint
+- For live mempool/block updates: a Monero node with ZMQ publishing enabled
+
+By default, the RPC services connect to `http://localhost:18081` and the WebSocket service connects to `tcp://0.0.0.0:18083`.
+
+All RPC-based Go services accept the following optional flags:
+
+- `--node-url`: Monero RPC URL
+- `--node-user`: Monero RPC username, if the node uses `--rpc-login`
+- `--node-pass`: Monero RPC password, if the node uses `--rpc-login`
+
+Flags must be passed before the datagen command:
+
+```sh
+go run . --node-url http://localhost:18081 generate
+go run . --node-url https://example-node --node-user USER --node-pass PASS generate
+```
+
+The WebSocket service only accepts `--node-url`, and it expects a ZMQ publisher URL.
 
 ### Populate the Database (datagen)
 
@@ -104,13 +122,22 @@ The SQLite database is stored at `datagen/database/monero.db`.
 What it does:
 
 - switches SQLite PRAGMA tuning to Raspberry Pi-safe/conservative settings
-- avoids the heavier post-processing gap scan done in non-`pi` mode
+- lowers worker counts, cache sizes, and RPC batch sizes
+- avoids heavier post-processing gap scans done in non-`pi` mode
 
 Use:
 
 - **without `pi`** on desktop/server hardware (higher performance)
 - **with `pi`** on constrained devices (safer memory/IO profile)
-- (After the intial database population, it is recommended to run the autogen service in "pi" mode)
+- (After the initial database population, it is recommended to run the autogen service in `pi` mode)
+
+When combining node flags with `pi`, keep the flags before the command and `pi` at the end:
+
+```sh
+go run . --node-url http://localhost:18081 generate pi
+go run . --node-url http://localhost:18081 autogen 10 pi
+go run ./webserver --node-url http://localhost:18081 pi
+```
 
 ### Start the Services
 
@@ -118,13 +145,29 @@ Use:
 
 From `datagen`: `go run ./webserver`
 
+```sh
+go run ./webserver
+go run ./webserver --node-url http://localhost:18081 --node-user USER --node-pass PASS
+```
+
 #### Start backend API (`:8080`)
 
 From `backend`: `go run .`
 
+```sh
+go run .
+go run . --node-url http://localhost:18081 --node-user USER --node-pass PASS
+```
+
 #### Start websocket service (`:8085`)
 
 From `websocket`: `go run .`
+
+With a custom ZMQ publisher:
+
+```sh
+go run . --node-url tcp://127.0.0.1:18083
+```
 
 #### Start frontend (`:4200` in dev)
 

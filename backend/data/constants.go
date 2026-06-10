@@ -1,5 +1,6 @@
 package data
 
-const Username = "" // Optional (Set only when using a remote node with --rpc-login enabled)
-const Password = "" //
+const DefaultNodeURL = "http://localhost:18081"
+const DefaultNodeUser = ""
+const DefaultNodePass = ""
 const DatagenBaseURL = "http://localhost:8081"
