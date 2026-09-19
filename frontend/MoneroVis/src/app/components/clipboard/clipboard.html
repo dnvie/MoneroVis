@@ -201,18 +201,25 @@
       <button (click)="createGroup()">Save</button>
     </div>
 
-    <div class="add-mode-selector">
-      <label
-        ><input type="radio" name="add-mode" value="manual" [(ngModel)]="addMode" /> Manual</label
+    <div class="mode-switcher add-mode-switcher">
+      <button
+        [class.active]="addMode === 'manual'"
+        (click)="setAddMode('manual')"
       >
-      <label
-        ><input type="radio" name="add-mode" value="indices" [(ngModel)]="addMode" /> By
-        Indices</label
+        Manual
+      </button>
+      <button
+        [class.active]="addMode === 'indices'"
+        (click)="setAddMode('indices')"
       >
-      <label
-        ><input type="radio" name="add-mode" value="hashes" [(ngModel)]="addMode" /> By
-        Hashes</label
+        By Indices
+      </button>
+      <button
+        [class.active]="addMode === 'hashes'"
+        (click)="setAddMode('hashes')"
       >
+        By Hashes
+      </button>
     </div>
 
     <div *ngIf="!showNewGroupForm() && addMode === 'manual'" class="sheet-input">

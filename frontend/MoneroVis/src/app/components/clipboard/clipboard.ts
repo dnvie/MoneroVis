@@ -58,6 +58,10 @@ export class Clipboard {
   inputValue = '';
   selectedCategoryId = 'default';
   addMode: 'manual' | 'indices' | 'hashes' = 'hashes';
+
+  setAddMode(mode: 'manual' | 'indices' | 'hashes') {
+    this.addMode = mode;
+  }
   batchInputValue = '';
 
   newGroupName = '';

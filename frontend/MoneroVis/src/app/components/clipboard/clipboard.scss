@@ -186,20 +186,7 @@
   }
 }
 
-.add-mode-selector {
-  padding: 10px 0;
-  display: flex;
-  gap: 15px;
-  font-size: 12px;
 
-  label {
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--text);
-  }
-}
 
 .group-creator {
   padding: 10px;
@@ -631,6 +618,12 @@
   padding: 4px;
   border-radius: 10px;
   width: fit-content;
+
+  &.add-mode-switcher {
+    top: 0;
+    margin-top: 4px;
+    margin-bottom: 8px;
+  }
 
   button {
     border: none;
