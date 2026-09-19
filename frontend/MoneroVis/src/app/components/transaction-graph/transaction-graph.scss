@@ -172,6 +172,48 @@
     font-weight: 500;
   }
 
+  .node-output-bubble {
+    cursor: pointer;
+    rect {
+      fill: var(--graphNodeFill);
+      stroke: steelblue;
+      stroke-width: 1.5px;
+      transition: fill 0.2s, stroke 0.2s;
+    }
+    &:hover rect {
+      fill: var(--graphRingBg);
+      stroke: #2b78e4;
+    }
+    text {
+      fill: var(--graphText);
+      font-size: 10px;
+      font-weight: 500;
+      font-family: 'Google Sans Code';
+      pointer-events: none;
+    }
+  }
+
+  .node-output-collapse {
+    cursor: pointer;
+    rect {
+      fill: var(--graphNodeFill);
+      stroke: #888;
+      stroke-width: 1px;
+      stroke-dasharray: 3, 2;
+      transition: fill 0.2s, stroke 0.2s;
+    }
+    &:hover rect {
+      fill: var(--graphRingBg);
+      stroke: #aaa;
+    }
+    text {
+      fill: var(--graphText);
+      font-size: 9px;
+      font-family: 'Google Sans Code';
+      pointer-events: none;
+    }
+  }
+
   .node.faded {
     opacity: 0.1;
     pointer-events: none;
@@ -205,6 +247,11 @@
     opacity: 1 !important;
     stroke-dasharray: none !important;
     animation: none !important;
+  }
+
+  .link.output-bubble-link {
+    stroke-dasharray: 4, 3 !important;
+    opacity: 0.5 !important;
   }
 
   @keyframes dash {

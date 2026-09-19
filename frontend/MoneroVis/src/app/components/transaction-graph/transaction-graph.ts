@@ -36,6 +36,7 @@ const OUTER_EDGE_BUFFER = 5;
 
 const LEGACY_MIN_RADIUS = 2;
 const LEGACY_MAX_RADIUS = 12;
+const MAX_OUTPUTS_BEFORE_COLLAPSE = 5;
 
 type GraphMode = 'ring' | 'legacy';
 
@@ -45,6 +46,7 @@ interface GraphInstance {
   outputRoot: d3.HierarchyNode<any>;
   offsetX: number;
   offsetY: number;
+  baseOffsetY?: number;
   expandedNodeIds: Set<string>;
   extraConnectors?: any[];
   rotationEnabled?: boolean;
@@ -56,6 +58,9 @@ interface GraphInstance {
     originY?: number;
     originAngle?: number;
   } | null;
+  allOutputs: any[];
+  outputsExpanded: boolean;
+  connectedOutputStealths: Set<string>;
 }
 
 interface GraphSaveFile {
@@ -70,6 +75,8 @@ interface GraphSaveFile {
     id: string;
     rotationEnabled?: boolean;
     expandedNodeIds: string[];
+    outputsExpanded?: boolean;
+    connectedOutputStealths?: string[];
   }[];
 }
 
@@ -171,6 +178,11 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         this.processAndRenderTransaction(newData);
       }
     }
+
+    if (changes['highlightedAddress'] && !changes['highlightedAddress'].isFirstChange()) {
+      this.graphs.forEach((g) => this.refreshGraphOutputs(g));
+      this.updateChart();
+    }
   }
 
   @HostListener('window:resize')
@@ -228,6 +240,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       extraConnectors: g.extraConnectors,
       id: g.id,
       rotationEnabled: g.rotationEnabled,
+      connectedOutputStealths: g.connectedOutputStealths,
+      outputsExpanded: g.outputsExpanded,
     }));
 
     if (this.svgSelection && this.svgSelection.node()) {
@@ -251,6 +265,16 @@ export class TransactionGraph implements OnDestroy, OnChanges {
 
       if (mappedRoot) {
         this.addTransactionToGraph(mappedRoot, null, false, rootInfo.rotationEnabled);
+        const rootGraph = this.graphs.find((g) => g.id === rootInfo.id);
+        if (rootGraph) {
+          if (rootInfo.connectedOutputStealths) {
+            rootGraph.connectedOutputStealths = new Set(rootInfo.connectedOutputStealths);
+          }
+          if (rootInfo.outputsExpanded !== undefined) {
+            rootGraph.outputsExpanded = rootInfo.outputsExpanded;
+          }
+          this.refreshGraphOutputs(rootGraph);
+        }
       }
 
       for (let i = 1; i < graphsToRestore.length; i++) {
@@ -279,6 +303,16 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                   : this.mapApiToD3_Legacy(gInfo.tx);
               if (mappedTx) {
                 this.addTransactionToGraph(mappedTx, alignTarget, false, gInfo.rotationEnabled);
+                const newGraph = this.graphs.find((g) => g.id === gInfo.id);
+                if (newGraph) {
+                  if (gInfo.connectedOutputStealths) {
+                    newGraph.connectedOutputStealths = new Set(gInfo.connectedOutputStealths);
+                  }
+                  if (gInfo.outputsExpanded !== undefined) {
+                    newGraph.outputsExpanded = gInfo.outputsExpanded;
+                  }
+                  this.refreshGraphOutputs(newGraph);
+                }
               }
             }
           }
@@ -399,7 +433,148 @@ export class TransactionGraph implements OnDestroy, OnChanges {
   }
 
   private findOutputNodeByStealth(graph: GraphInstance, stealth: string) {
-    return graph.outputRoot.leaves().find((n: any) => n.data.stealth_address === stealth);
+    let node = graph.outputRoot.leaves().find((n: any) => n.data?.stealth_address === stealth);
+    if (!node && graph.allOutputs?.some((o: any) => o.stealth_address === stealth)) {
+      if (!graph.connectedOutputStealths) graph.connectedOutputStealths = new Set<string>();
+      graph.connectedOutputStealths.add(stealth);
+      this.refreshGraphOutputs(graph);
+      node = graph.outputRoot.leaves().find((n: any) => n.data?.stealth_address === stealth);
+    }
+    return node;
+  }
+
+  private getConnectedStealthAddressesForGraph(graph: GraphInstance): Set<string> {
+    const connected = new Set<string>();
+    if (graph.connectedOutputStealths) {
+      graph.connectedOutputStealths.forEach((s) => connected.add(s));
+    }
+    if (graph.connector && graph.connector.targetNode?.data?.stealth_address) {
+      connected.add(graph.connector.targetNode.data.stealth_address);
+    }
+    this.graphs.forEach((g) => {
+      if (g.extraConnectors) {
+        g.extraConnectors.forEach((ec) => {
+          if (ec.targetGraph?.id === graph.id) {
+            const stealth =
+              ec.targetNode?.data?.stealth_address ||
+              ec.originNodeData?.hash ||
+              ec.originNode?.data?.hash;
+            if (stealth) connected.add(stealth);
+          }
+        });
+      }
+    });
+    return connected;
+  }
+
+  public refreshGraphOutputs(graph: GraphInstance): void {
+    if (!graph.allOutputs || graph.allOutputs.length === 0) {
+      const rawTx = (graph.inputRoot?.data?.raw || graph.outputRoot?.data?.raw) as Transaction;
+      if (rawTx && rawTx.outputs) {
+        graph.allOutputs = rawTx.outputs.map((out, i) => ({
+          id: `out-${rawTx.tx_hash}-${i}`,
+          type: 'output',
+          output_index: out.output_index,
+          stealth_address: out.stealth_address,
+        }));
+      } else {
+        graph.allOutputs = [];
+      }
+    }
+
+    const totalOutputs = graph.allOutputs.length;
+    let visibleOutputs: any[] = [];
+
+    if (totalOutputs <= MAX_OUTPUTS_BEFORE_COLLAPSE) {
+      visibleOutputs = [...graph.allOutputs];
+    } else {
+      const connectedStealths = this.getConnectedStealthAddressesForGraph(graph);
+      const explicitOutputs = graph.allOutputs.filter(
+        (o) =>
+          connectedStealths.has(o.stealth_address) ||
+          (this.highlightedAddress && o.stealth_address === this.highlightedAddress),
+      );
+      const hiddenOutputs = graph.allOutputs.filter(
+        (o) =>
+          !connectedStealths.has(o.stealth_address) &&
+          (!this.highlightedAddress || o.stealth_address !== this.highlightedAddress),
+      );
+
+      if (hiddenOutputs.length <= 1) {
+        visibleOutputs = [...graph.allOutputs];
+      } else if (graph.outputsExpanded) {
+        visibleOutputs = [
+          ...graph.allOutputs,
+          {
+            id: `out-collapse-${graph.id}`,
+            type: 'output_collapse',
+            tx_hash: graph.id,
+          },
+        ];
+      } else {
+        visibleOutputs = [...explicitOutputs];
+        visibleOutputs.push({
+          id: `out-bubble-${graph.id}`,
+          type: 'output_bubble',
+          count: hiddenOutputs.length,
+          totalCount: totalOutputs,
+          bundledOutputs: hiddenOutputs,
+          tx_hash: graph.id,
+        });
+      }
+    }
+
+    const txData = graph.outputRoot?.data || graph.inputRoot?.data;
+    if (txData) {
+      txData.outputs = visibleOutputs;
+      const newOutputRoot = d3.hierarchy(txData, (d: any) => d.outputs);
+      graph.outputRoot = newOutputRoot;
+
+      if (this.currentMode() === 'ring') {
+        this.updateGraphLayout_Ring(graph);
+      } else {
+        this.updateGraphLayout_Legacy(graph);
+      }
+    }
+
+    if (graph.connector && graph.connector.targetNode?.data?.stealth_address) {
+      const matchNode = this.findOutputNodeByStealth(
+        graph,
+        graph.connector.targetNode.data.stealth_address,
+      );
+      if (matchNode) {
+        graph.connector.targetNode = matchNode;
+      }
+    }
+
+    this.graphs.forEach((g) => {
+      if (g.extraConnectors) {
+        g.extraConnectors.forEach((ec) => {
+          if (ec.targetGraph?.id === graph.id) {
+            const stealth =
+              ec.targetNode?.data?.stealth_address ||
+              ec.originNodeData?.hash ||
+              ec.originNode?.data?.hash;
+            if (stealth) {
+              const matchNode = this.findOutputNodeByStealth(graph, stealth);
+              if (matchNode) {
+                ec.targetNode = matchNode;
+              }
+            }
+          }
+        });
+      }
+    });
+  }
+
+  public toggleOutputsExpanded(graph: GraphInstance): void {
+    this.hideTooltip();
+    if (this.svgSelection && this.svgSelection.node()) {
+      this.preservedZoom = d3.zoomTransform(this.svgSelection.node() as Element);
+    }
+    graph.outputsExpanded = !graph.outputsExpanded;
+    this.refreshGraphOutputs(graph);
+    this.updateChart();
   }
 
   private restoreExtraConnectors(oldGraphs: any[]) {
@@ -559,6 +734,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       type: 'tx',
       inputs: inputs,
       outputs: outputs,
+      allOutputs: outputs,
       block_height: txBlockHeight,
       raw: tx,
     };
@@ -607,21 +783,30 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       id: txData.id,
       inputRoot,
       outputRoot,
+      allOutputs: txData.allOutputs || txData.outputs || [],
+      outputsExpanded: false,
+      connectedOutputStealths: new Set<string>(),
       offsetX: 0,
       offsetY: 0,
+      baseOffsetY: 0,
       connector: null,
       expandedNodeIds: new Set(),
       rotationEnabled: rotationEnabled,
     };
 
+    if (alignTarget) {
+      const targetStealth = alignTarget.data?.hash || alignTarget.data?.output_stealth_address;
+      if (targetStealth) {
+        graph.connectedOutputStealths?.add(targetStealth);
+      }
+    }
+
     this.isEmpty.set(false);
-    this.updateGraphLayout_Ring(graph);
+    this.refreshGraphOutputs(graph);
 
     if (alignTarget) {
       const targetStealthAddress = alignTarget.data.hash;
-      const matchNode: any = outputRoot
-        .leaves()
-        .find((d: any) => d.data.stealth_address === targetStealthAddress);
+      const matchNode: any = this.findOutputNodeByStealth(graph, targetStealthAddress);
 
       const anchorX = alignTarget.absoluteX;
       const anchorY = alignTarget.absoluteY;
@@ -634,7 +819,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       const measure = (n: any) => {
         let r = 10;
         if (n.data.type === 'input') r = 90;
-        if (n.data.type === 'tx' || n.data.type === 'coinbase_start') r = 15;
+        if (n.data.type === 'tx' || n.data.type === 'coinbase_start' || n.data.type === 'output_bubble' || n.data.type === 'output_collapse') r = 15;
         if (n.x - r < newMinY) newMinY = n.x - r;
         if (n.x + r > newMaxY) newMaxY = n.x + r;
       };
@@ -653,7 +838,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         const measureG = (n: any) => {
           let r = 10;
           if (n.data.type === 'input') r = 90;
-          if (n.data.type === 'tx' || n.data.type === 'coinbase_start') r = 15;
+          if (n.data.type === 'tx' || n.data.type === 'coinbase_start' || n.data.type === 'output_bubble' || n.data.type === 'output_collapse') r = 15;
           const absY = n.x + g.offsetY;
           if (absY - r < gMinY) gMinY = absY - r;
           if (absY + r > gMaxY) gMaxY = absY + r;
@@ -690,6 +875,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
 
       graph.offsetX = proposedOffsetX;
       graph.offsetY = finalOffsetY;
+      graph.baseOffsetY = finalOffsetY;
 
       graph.connector = {
         originGraphId: alignTarget.originGraphId,
@@ -1039,6 +1225,82 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               `<strong>OUTPUT</strong><br>Stealth Address:<br>${d.data.stealth_address.substring(0, 6)}...${d.data.stealth_address.slice(-6)}`,
             );
           }).on('mouseout', () => this.hideTooltip());
+        } else if (type === 'output_bubble') {
+          const count = d.data.count;
+          const isPartial = d.data.count < d.data.totalCount;
+          const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+          const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+          const pillHeight = 22;
+
+          el.append('rect')
+            .attr('class', 'bubble-rect')
+            .attr('x', -textWidth / 2)
+            .attr('y', -pillHeight / 2)
+            .attr('width', textWidth)
+            .attr('height', pillHeight)
+            .attr('rx', pillHeight / 2)
+            .style('fill', 'var(--graphNodeFill)')
+            .style('stroke', 'steelblue')
+            .style('stroke-width', '1.5px');
+
+          el.append('text')
+            .attr('dy', 3.5)
+            .attr('text-anchor', 'middle')
+            .text(labelText)
+            .style('fill', 'var(--graphText)')
+            .style('font-size', '10px')
+            .style('font-weight', '500')
+            .style('font-family', 'Google Sans Code')
+            .style('pointer-events', 'none');
+
+          el.style('cursor', 'pointer');
+          el.on('click', (e: MouseEvent) => {
+            e.stopPropagation();
+            this.toggleOutputsExpanded(graph);
+          });
+          el.on('mouseover', (e: MouseEvent) => {
+            this.showTooltip(
+              e,
+              `<strong>${count} OUTPUTS</strong><br>Click to expand all outputs`,
+            );
+          }).on('mouseout', () => this.hideTooltip());
+        } else if (type === 'output_collapse') {
+          const labelText = '▲ Collapse';
+          const textWidth = 75;
+          const pillHeight = 20;
+
+          el.append('rect')
+            .attr('class', 'collapse-rect')
+            .attr('x', -textWidth / 2)
+            .attr('y', -pillHeight / 2)
+            .attr('width', textWidth)
+            .attr('height', pillHeight)
+            .attr('rx', pillHeight / 2)
+            .style('fill', 'var(--graphNodeFill)')
+            .style('stroke', '#888')
+            .style('stroke-dasharray', '3, 2')
+            .style('stroke-width', '1px');
+
+          el.append('text')
+            .attr('dy', 3.5)
+            .attr('text-anchor', 'middle')
+            .text(labelText)
+            .style('fill', 'var(--graphText)')
+            .style('font-size', '9px')
+            .style('font-family', 'Google Sans Code')
+            .style('pointer-events', 'none');
+
+          el.style('cursor', 'pointer');
+          el.on('click', (e: MouseEvent) => {
+            e.stopPropagation();
+            this.toggleOutputsExpanded(graph);
+          });
+          el.on('mouseover', (e: MouseEvent) => {
+            this.showTooltip(
+              e,
+              `<strong>COLLAPSE</strong><br>Click to collapse outputs into bubble`,
+            );
+          }).on('mouseout', () => this.hideTooltip());
         } else if (type === 'input') {
           if (d.data.arcs) {
             const handleRingClick = (e: MouseEvent, arc: any) => {
@@ -1132,11 +1394,19 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         const allNodes = root.descendants();
         const bottomNodes = allNodes.filter(
           (d: any) =>
-            d.data.type !== 'output' && d.data.type !== 'tx' && d.data.type !== 'coinbase_start',
+            d.data.type !== 'output' &&
+            d.data.type !== 'output_bubble' &&
+            d.data.type !== 'output_collapse' &&
+            d.data.type !== 'tx' &&
+            d.data.type !== 'coinbase_start',
         );
         const topNodes = allNodes.filter(
           (d: any) =>
-            d.data.type === 'output' || d.data.type === 'tx' || d.data.type === 'coinbase_start',
+            d.data.type === 'output' ||
+            d.data.type === 'output_bubble' ||
+            d.data.type === 'output_collapse' ||
+            d.data.type === 'tx' ||
+            d.data.type === 'coinbase_start',
         );
 
         linksLayer
@@ -1152,6 +1422,11 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               bridgeOutputs.has(d.target.data.id)
             )
               c += ' connected-path';
+            if (
+              d.target.data.type === 'output_bubble' ||
+              d.target.data.type === 'output_collapse'
+            )
+              c += ' output-bubble-link';
             return c;
           })
           .attr(
@@ -1180,7 +1455,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           .data(topNodes)
           .enter()
           .append('g')
-          .attr('class', (d: any) => `node node-${d.data.type.split('_')[0]}`)
+          .attr('class', (d: any) => `node node-${d.data.type.replace(/_/g, '-')}`)
           .attr('transform', (d: any) => `translate(${d.y + graph.offsetX},${d.x + graph.offsetY})`)
           .each(drawNodeContent);
       });
@@ -1246,9 +1521,13 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     const existingGraph = this.graphs.find((g) => g.id === parentId);
     if (existingGraph) {
       const targetStealthAddress = d.hash;
-      const matchNode: any = existingGraph.outputRoot
-        .leaves()
-        .find((n: any) => n.data.stealth_address === targetStealthAddress);
+      if (!existingGraph.connectedOutputStealths) {
+        existingGraph.connectedOutputStealths = new Set<string>();
+      }
+      existingGraph.connectedOutputStealths.add(targetStealthAddress);
+      this.refreshGraphOutputs(existingGraph);
+
+      const matchNode: any = this.findOutputNodeByStealth(existingGraph, targetStealthAddress);
       if (matchNode) {
         if (!graph.extraConnectors) graph.extraConnectors = [];
         graph.extraConnectors.push({
@@ -1307,9 +1586,19 @@ export class TransactionGraph implements OnDestroy, OnChanges {
   private removeDownstreamGraphs_Ring(ringMemberIds: string[]): void {
     this.graphs.forEach((g) => {
       if (g.extraConnectors) {
+        const removed = g.extraConnectors.filter((ec) =>
+          ringMemberIds.includes(ec.originNodeData.id),
+        );
         g.extraConnectors = g.extraConnectors.filter(
           (ec) => !ringMemberIds.includes(ec.originNodeData.id),
         );
+        removed.forEach((ec) => {
+          const targetG = ec.targetGraph;
+          if (targetG && targetG.connectedOutputStealths) {
+            targetG.connectedOutputStealths.delete(ec.originNodeData.hash);
+            this.refreshGraphOutputs(targetG);
+          }
+        });
       }
     });
 
@@ -1339,6 +1628,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     });
     const idsToRemove = new Set(graphsToRemove.map((g) => g.id));
     this.graphs = this.graphs.filter((g) => !idsToRemove.has(g.id));
+    this.graphs.forEach((g) => this.refreshGraphOutputs(g));
   }
 
   private drawBridgeLink_Ring(container: any, pathData: string, originId: string) {
@@ -1361,16 +1651,66 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       .style('opacity', '0.6');
   }
 
+  private getIdealOffsetY_Ring(graph: GraphInstance): number {
+    if (!graph.connector) {
+      return graph.baseOffsetY ?? graph.offsetY ?? 0;
+    }
+    const parentGraph = this.graphs.find((g) => g.id === graph.connector!.originGraphId);
+    if (!parentGraph) {
+      return graph.baseOffsetY ?? graph.offsetY ?? 0;
+    }
+
+    const inputNode = parentGraph.inputRoot
+      .leaves()
+      .find((n: any) =>
+        n.data.ring_members?.some((rm: any) => rm.id === graph.connector!.originNodeId),
+      );
+
+    let anchorY = parentGraph.offsetY;
+    if (inputNode && inputNode.data.arcs) {
+      const arc = inputNode.data.arcs.find(
+        (a: any) => a.data.id === graph.connector!.originNodeId,
+      );
+      if (arc) {
+        const centerX = inputNode.y! + parentGraph.offsetX;
+        const centerY = inputNode.x! + parentGraph.offsetY;
+        const r = MAX_RADIUS + MAX_THICKNESS + OUTER_EDGE_BUFFER;
+        const startPoint = this.getOuterEdgePoint(
+          centerX,
+          centerY,
+          arc.startAngle,
+          arc.endAngle,
+          r,
+        );
+        anchorY = startPoint.y;
+      } else if (typeof inputNode.x === 'number') {
+        anchorY = inputNode.x + parentGraph.offsetY;
+      }
+    } else if (inputNode && typeof inputNode.x === 'number') {
+      anchorY = inputNode.x + parentGraph.offsetY;
+    } else if (typeof graph.connector.originY === 'number') {
+      anchorY = graph.connector.originY;
+    }
+
+    const targetNode = graph.connector.targetNode;
+    const targetNodeX = targetNode && typeof targetNode.x === 'number' ? targetNode.x : 0;
+    return anchorY - targetNodeX;
+  }
+
   private resolveCollisions_Ring(): void {
-    const iterations = 10;
+    const n = this.graphs.length;
+    if (n <= 1) return;
+
     const padding = 60;
-    const getBounds = (g: GraphInstance) => {
+    const xBuffer = 20;
+
+    const getLocalBounds = (g: GraphInstance) => {
       let minY = Infinity,
         maxY = -Infinity,
         minX = Infinity,
         maxX = -Infinity;
       const update = (node: any) => {
-        const absY = node.x + g.offsetY;
+        const localY = node.x;
         const absX = node.y + g.offsetX;
         let rY = 0,
           rX = 0;
@@ -1380,51 +1720,112 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         } else if (node.data.type === 'tx' || node.data.type === 'coinbase_start') {
           rY = 15;
           rX = 50;
+        } else if (node.data.type === 'output_bubble' || node.data.type === 'output_collapse') {
+          rY = 15;
+          rX = 45;
         } else {
           rY = 10;
           rX = 10;
         }
-        if (absY - rY < minY) minY = absY - rY;
-        if (absY + rY > maxY) maxY = absY + rY;
+        if (localY - rY < minY) minY = localY - rY;
+        if (localY + rY > maxY) maxY = localY + rY;
         if (absX - rX < minX) minX = absX - rX;
         if (absX + rX > maxX) maxX = absX + rX;
       };
       g.inputRoot.descendants().forEach(update);
       g.outputRoot.descendants().forEach(update);
-      return { minX, maxX, minY, maxY, id: g.id };
+      return { minX, maxX, minY, maxY };
     };
 
-    for (let k = 0; k < iterations; k++) {
-      let hasCollision = false;
-      const bounds = this.graphs.map((g) => ({ g, rect: getBounds(g) }));
-      for (let i = 0; i < bounds.length; i++) {
-        for (let j = i + 1; j < bounds.length; j++) {
-          const b1 = bounds[i];
-          const b2 = bounds[j];
-          const xBuffer = 20;
-          const noXOverlap =
-            b1.rect.maxX < b2.rect.minX - xBuffer || b1.rect.minX > b2.rect.maxX + xBuffer;
-          if (noXOverlap) continue;
-          const noYOverlap =
-            b1.rect.maxY < b2.rect.minY - padding || b1.rect.minY > b2.rect.maxY + padding;
-          if (!noYOverlap) {
-            hasCollision = true;
-            const overlapHeight =
-              Math.min(b1.rect.maxY, b2.rect.maxY) - Math.max(b1.rect.minY, b2.rect.minY) + padding;
-            const c1 = (b1.rect.minY + b1.rect.maxY) / 2;
-            const c2 = (b2.rect.minY + b2.rect.maxY) / 2;
-            const shift = overlapHeight / 2;
-            if (c1 < c2) {
-              b1.g.offsetY -= shift;
-              b2.g.offsetY += shift;
-            } else {
-              b2.g.offsetY -= shift;
-              b1.g.offsetY += shift;
+    const graphData = this.graphs.map((g) => {
+      const b = getLocalBounds(g);
+      const ideal = this.getIdealOffsetY_Ring(g);
+      return {
+        g,
+        localMinY: b.minY,
+        localMaxY: b.maxY,
+        minX: b.minX,
+        maxX: b.maxX,
+        idealOffsetY: ideal,
+      };
+    });
+
+    const visited = new Set<number>();
+    const columns: (typeof graphData)[] = [];
+
+    for (let i = 0; i < n; i++) {
+      if (visited.has(i)) continue;
+      const col: typeof graphData = [];
+      const queue = [i];
+      visited.add(i);
+
+      while (queue.length > 0) {
+        const currIdx = queue.shift()!;
+        col.push(graphData[currIdx]);
+
+        for (let j = 0; j < n; j++) {
+          if (!visited.has(j)) {
+            const b1 = graphData[currIdx];
+            const b2 = graphData[j];
+            const overlaps = !(b1.maxX < b2.minX - xBuffer || b1.minX > b2.maxX + xBuffer);
+            if (overlaps) {
+              visited.add(j);
+              queue.push(j);
             }
           }
         }
       }
-      if (!hasCollision) break;
+      columns.push(col);
+    }
+
+    for (const col of columns) {
+      if (col.length <= 1) {
+        col[0].g.offsetY = col[0].idealOffsetY;
+        continue;
+      }
+
+      col.sort((a, b) => a.g.offsetY - b.g.offsetY);
+
+      const m = col.length;
+      const D: number[] = [];
+      for (let i = 0; i < m - 1; i++) {
+        D.push(col[i].localMaxY - col[i + 1].localMinY + padding);
+      }
+
+      const Y = col.map((item) => item.g.offsetY);
+
+      for (let iter = 0; iter < 40; iter++) {
+        for (let i = 0; i < m; i++) {
+          const ideal = col[i].idealOffsetY;
+          const minBound = i > 0 ? Y[i - 1] + D[i - 1] : -Infinity;
+          const maxBound = i < m - 1 ? Y[i + 1] - D[i] : Infinity;
+
+          if (minBound <= maxBound) {
+            const target = Math.max(minBound, Math.min(maxBound, ideal));
+            Y[i] += (target - Y[i]) * 0.4;
+          }
+        }
+
+        for (let i = 0; i < m - 1; i++) {
+          if (Y[i + 1] < Y[i] + D[i]) {
+            const overlap = Y[i] + D[i] - Y[i + 1];
+            Y[i] -= overlap / 2;
+            Y[i + 1] += overlap / 2;
+          }
+        }
+
+        for (let i = m - 2; i >= 0; i--) {
+          if (Y[i] > Y[i + 1] - D[i]) {
+            const overlap = Y[i] - (Y[i + 1] - D[i]);
+            Y[i] -= overlap / 2;
+            Y[i + 1] += overlap / 2;
+          }
+        }
+      }
+
+      for (let i = 0; i < m; i++) {
+        col[i].g.offsetY = Y[i];
+      }
     }
   }
 
@@ -1468,6 +1869,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       type: 'tx',
       inputs: inputs,
       outputs: outputs,
+      allOutputs: outputs,
       block_height: txBlockHeight,
       raw: tx,
     };
@@ -1491,6 +1893,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         return LEGACY_MIN_RADIUS + ratio * (LEGACY_MAX_RADIUS - LEGACY_MIN_RADIUS);
       } else if (node.data.type === 'output') {
         return 5;
+      } else if (node.data.type === 'output_bubble' || node.data.type === 'output_collapse') {
+        return 10;
       } else if (node.data.type === 'input') {
         return 6;
       } else if (node.data.type === 'tx') {
@@ -1644,20 +2048,29 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       id: txData.id,
       inputRoot,
       outputRoot,
+      allOutputs: txData.allOutputs || txData.outputs || [],
+      outputsExpanded: false,
+      connectedOutputStealths: new Set<string>(),
       offsetX: 0,
       offsetY: 0,
+      baseOffsetY: 0,
       connector: null,
       expandedNodeIds: new Set(),
     };
 
-    this.updateGraphLayout_Legacy(graph);
+    if (alignTarget) {
+      const targetStealth = alignTarget.data?.output_stealth_address || alignTarget.data?.hash;
+      if (targetStealth) {
+        graph.connectedOutputStealths?.add(targetStealth);
+      }
+    }
+
     this.isEmpty.set(false);
+    this.refreshGraphOutputs(graph);
 
     if (alignTarget) {
-      const targetStealthAddress = alignTarget.data.output_stealth_address;
-      const matchNode: any = outputRoot
-        .leaves()
-        .find((d: any) => d.data.stealth_address === targetStealthAddress);
+      const targetStealthAddress = alignTarget.data.output_stealth_address || alignTarget.data.hash;
+      const matchNode: any = this.findOutputNodeByStealth(graph, targetStealthAddress);
       const siblings = alignTarget.parent.children;
       const parentOffsetX = alignTarget.parentOffsetX;
       const minSiblingXValue = d3.min(siblings, (s: any) => s.y + parentOffsetX);
@@ -1733,18 +2146,21 @@ export class TransactionGraph implements OnDestroy, OnChanges {
 
       graph.offsetX = proposedOffsetX;
       graph.offsetY = finalOffsetY;
+      graph.baseOffsetY = finalOffsetY;
 
       if (matchNode && typeof matchNode.y === 'number') {
         graph.connector = {
           originGraphId: alignTarget.originGraphId,
           originNodeId: alignTarget.data.id,
           targetNode: matchNode,
+          originY: idealOffsetY,
         };
       } else {
         graph.connector = {
           originGraphId: alignTarget.originGraphId,
           originNodeId: alignTarget.data.id,
           targetNode: { y: 300, x: 0 },
+          originY: idealOffsetY,
         };
       }
     }
@@ -1898,6 +2314,11 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               bridgeOutputs.has(d.target.data.id)
             )
               c += ' connected-path';
+            if (
+              d.target.data.type === 'output_bubble' ||
+              d.target.data.type === 'output_collapse'
+            )
+              c += ' output-bubble-link';
             return c;
           })
           .style('stroke', null)
@@ -1927,6 +2348,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             }
             if (d.data.type === 'ring_member') c += ' node-ring';
             if (d.data.type === 'tx') c += ' node-tx';
+            if (d.data.type === 'output_bubble') c += ' node-output-bubble';
+            if (d.data.type === 'output_collapse') c += ' node-output-collapse';
             return c;
           })
           .attr('transform', (d: any) => `translate(${d.y + graph.offsetX},${d.x + graph.offsetY})`)
@@ -1944,6 +2367,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             } else if (d.data.type === 'output') {
               html += `<br>Stealth Address: ${d.data.stealth_address.substring(0, 8)}…${d.data.stealth_address.slice(-8)}`;
               html += `<br>Output Index: ${d.data.output_index}`;
+            } else if (d.data.type === 'output_bubble') {
+              html += `<br>Count: ${d.data.count} outputs<br>Click to expand all outputs`;
+            } else if (d.data.type === 'output_collapse') {
+              html += `<br>Click to collapse outputs into bubble`;
             } else if (d.data.type === 'input') {
               html += `<br>Key Image: ${d.data.key_image.substring(0, 8)}…${d.data.key_image.slice(-8)}`;
               html += `<br>Ring Size: ${d.data.children.length}`;
@@ -2094,6 +2521,62 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             if (isConnectedAsTarget) fillColor = '#59a14f';
             else if (isHighlighted) fillColor = '#DF560A';
             el.append('path').attr('d', 'M -5,-5 L 5,0 L -5,5 Z').attr('fill', fillColor);
+          } else if (d.data.type === 'output_bubble') {
+            const count = d.data.count;
+            const isPartial = d.data.count < d.data.totalCount;
+            const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+            const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+            const pillHeight = 22;
+
+            el.append('rect')
+              .attr('class', 'bubble-rect')
+              .attr('x', -textWidth / 2)
+              .attr('y', -pillHeight / 2)
+              .attr('width', textWidth)
+              .attr('height', pillHeight)
+              .attr('rx', pillHeight / 2)
+              .style('fill', 'var(--graphNodeFill)')
+              .style('stroke', 'steelblue')
+              .style('stroke-width', '1.5px');
+
+            el.append('text')
+              .attr('dy', 3.5)
+              .attr('text-anchor', 'middle')
+              .text(labelText)
+              .style('fill', 'var(--graphText)')
+              .style('font-size', '10px')
+              .style('font-weight', '500')
+              .style('font-family', 'Google Sans Code')
+              .style('pointer-events', 'none');
+
+            el.style('cursor', 'pointer');
+          } else if (d.data.type === 'output_collapse') {
+            const labelText = '▲ Collapse';
+            const textWidth = 75;
+            const pillHeight = 20;
+
+            el.append('rect')
+              .attr('class', 'collapse-rect')
+              .attr('x', -textWidth / 2)
+              .attr('y', -pillHeight / 2)
+              .attr('width', textWidth)
+              .attr('height', pillHeight)
+              .attr('rx', pillHeight / 2)
+              .style('fill', 'var(--graphNodeFill)')
+              .style('stroke', '#888')
+              .style('stroke-dasharray', '3, 2')
+              .style('stroke-width', '1px');
+
+            el.append('text')
+              .attr('dy', 3.5)
+              .attr('text-anchor', 'middle')
+              .text(labelText)
+              .style('fill', 'var(--graphText)')
+              .style('font-size', '9px')
+              .style('font-family', 'Google Sans Code')
+              .style('pointer-events', 'none');
+
+            el.style('cursor', 'pointer');
           } else if (d.data.type === 'input') {
             el.append('path').attr('d', 'M 0,-6 L 6,0 L 0,6 L -6,0 Z').attr('fill', '#00bcd4');
             el.style('cursor', 'default');
@@ -2118,6 +2601,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     this.hideTooltip();
     event.stopPropagation();
     const type = d.data.type;
+    if (type === 'output_bubble' || type === 'output_collapse') {
+      this.toggleOutputsExpanded(graph);
+      return;
+    }
     if (type === 'tx') {
       event.preventDefault();
       const currentLabelData = this.txLabels.get(d.data.id) || { text: '', color: '#e04f5f' };
@@ -2158,9 +2645,13 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       const existingGraph = this.graphs.find((g) => g.id === parentId);
       if (existingGraph) {
         const targetStealthAddress = d.data.hash;
-        const matchNode: any = existingGraph.outputRoot
-          .leaves()
-          .find((node: any) => node.data.stealth_address === targetStealthAddress);
+        if (!existingGraph.connectedOutputStealths) {
+          existingGraph.connectedOutputStealths = new Set<string>();
+        }
+        existingGraph.connectedOutputStealths.add(targetStealthAddress);
+        this.refreshGraphOutputs(existingGraph);
+
+        const matchNode: any = this.findOutputNodeByStealth(existingGraph, targetStealthAddress);
         if (matchNode) {
           if (!graph.extraConnectors) graph.extraConnectors = [];
           graph.extraConnectors.push({
@@ -2212,10 +2703,21 @@ export class TransactionGraph implements OnDestroy, OnChanges {
 
   private removeDownstreamGraphs_Legacy(ringMemberIds: string[]): void {
     this.graphs.forEach((g) => {
-      if (g.extraConnectors)
+      if (g.extraConnectors) {
+        const removed = g.extraConnectors.filter((ec) =>
+          ringMemberIds.includes(ec.originNode.data.id),
+        );
         g.extraConnectors = g.extraConnectors.filter(
           (ec) => !ringMemberIds.includes(ec.originNode.data.id),
         );
+        removed.forEach((ec) => {
+          const targetG = ec.targetGraph;
+          if (targetG && targetG.connectedOutputStealths) {
+            targetG.connectedOutputStealths.delete(ec.originNode.data.hash);
+            this.refreshGraphOutputs(targetG);
+          }
+        });
+      }
     });
     const graphsToRemove = this.graphs.filter(
       (g) => g.connector && ringMemberIds.includes(g.connector.originNodeId),
@@ -2234,60 +2736,157 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     });
     const idsToRemove = new Set(graphsToRemove.map((g) => g.id));
     this.graphs = this.graphs.filter((g) => !idsToRemove.has(g.id));
+    this.graphs.forEach((g) => this.refreshGraphOutputs(g));
+  }
+
+  private getIdealOffsetY_Legacy(graph: GraphInstance): number {
+    if (!graph.connector) {
+      return graph.baseOffsetY ?? graph.offsetY ?? 0;
+    }
+    const parentGraph = this.graphs.find((g) => g.id === graph.connector!.originGraphId);
+    if (!parentGraph) {
+      return graph.baseOffsetY ?? graph.offsetY ?? 0;
+    }
+
+    const originNode = parentGraph.inputRoot
+      .descendants()
+      .find((n: any) => n.data.id === graph.connector!.originNodeId);
+
+    let anchorY = parentGraph.offsetY;
+    if (originNode && typeof originNode.x === 'number') {
+      anchorY = originNode.x + parentGraph.offsetY;
+    } else if (typeof graph.connector.originY === 'number') {
+      anchorY = graph.connector.originY;
+    }
+
+    const targetNode = graph.connector.targetNode;
+    const targetNodeX = targetNode && typeof targetNode.x === 'number' ? targetNode.x : 0;
+    return anchorY - targetNodeX;
   }
 
   private resolveCollisions_Legacy(): void {
-    const iterations = 10;
+    const n = this.graphs.length;
+    if (n <= 1) return;
+
     const padding = 60;
-    const getBounds = (g: GraphInstance) => {
+    const xBuffer = 20;
+
+    const getLocalBounds = (g: GraphInstance) => {
       let minY = Infinity,
         maxY = -Infinity,
         minX = Infinity,
         maxX = -Infinity;
       const update = (node: any) => {
-        const absY = node.x + g.offsetY;
+        const localY = node.x;
         const absX = node.y + g.offsetX;
-        if (absY < minY) minY = absY;
-        if (absY > maxY) maxY = absY;
-        if (absX < minX) minX = absX;
-        if (absX > maxX) maxX = absX;
+        let rY = 0,
+          rX = 0;
+        if (node.data.type === 'output_bubble' || node.data.type === 'output_collapse') {
+          rY = 15;
+          rX = 45;
+        } else {
+          rY = 10;
+          rX = 10;
+        }
+        if (localY - rY < minY) minY = localY - rY;
+        if (localY + rY > maxY) maxY = localY + rY;
+        if (absX - rX < minX) minX = absX - rX;
+        if (absX + rX > maxX) maxX = absX + rX;
       };
       g.inputRoot.descendants().forEach(update);
       g.outputRoot.descendants().forEach(update);
-      return { minX, maxX, minY, maxY, id: g.id };
+      return { minX, maxX, minY, maxY };
     };
 
-    for (let k = 0; k < iterations; k++) {
-      let hasCollision = false;
-      const bounds = this.graphs.map((g) => ({ g, rect: getBounds(g) }));
-      for (let i = 0; i < bounds.length; i++) {
-        for (let j = i + 1; j < bounds.length; j++) {
-          const b1 = bounds[i];
-          const b2 = bounds[j];
-          const xBuffer = 20;
-          const noXOverlap =
-            b1.rect.maxX < b2.rect.minX - xBuffer || b1.rect.minX > b2.rect.maxX + xBuffer;
-          if (noXOverlap) continue;
-          const noYOverlap =
-            b1.rect.maxY < b2.rect.minY - padding || b1.rect.minY > b2.rect.maxY + padding;
-          if (!noYOverlap) {
-            hasCollision = true;
-            const overlapHeight =
-              Math.min(b1.rect.maxY, b2.rect.maxY) - Math.max(b1.rect.minY, b2.rect.minY) + padding;
-            const c1 = (b1.rect.minY + b1.rect.maxY) / 2;
-            const c2 = (b2.rect.minY + b2.rect.maxY) / 2;
-            const shift = overlapHeight / 2;
-            if (c1 < c2) {
-              b1.g.offsetY -= shift;
-              b2.g.offsetY += shift;
-            } else {
-              b2.g.offsetY -= shift;
-              b1.g.offsetY += shift;
+    const graphData = this.graphs.map((g) => {
+      const b = getLocalBounds(g);
+      const ideal = this.getIdealOffsetY_Legacy(g);
+      return {
+        g,
+        localMinY: b.minY,
+        localMaxY: b.maxY,
+        minX: b.minX,
+        maxX: b.maxX,
+        idealOffsetY: ideal,
+      };
+    });
+
+    const visited = new Set<number>();
+    const columns: (typeof graphData)[] = [];
+
+    for (let i = 0; i < n; i++) {
+      if (visited.has(i)) continue;
+      const col: typeof graphData = [];
+      const queue = [i];
+      visited.add(i);
+
+      while (queue.length > 0) {
+        const currIdx = queue.shift()!;
+        col.push(graphData[currIdx]);
+
+        for (let j = 0; j < n; j++) {
+          if (!visited.has(j)) {
+            const b1 = graphData[currIdx];
+            const b2 = graphData[j];
+            const overlaps = !(b1.maxX < b2.minX - xBuffer || b1.minX > b2.maxX + xBuffer);
+            if (overlaps) {
+              visited.add(j);
+              queue.push(j);
             }
           }
         }
       }
-      if (!hasCollision) break;
+      columns.push(col);
+    }
+
+    for (const col of columns) {
+      if (col.length <= 1) {
+        col[0].g.offsetY = col[0].idealOffsetY;
+        continue;
+      }
+
+      col.sort((a, b) => a.g.offsetY - b.g.offsetY);
+
+      const m = col.length;
+      const D: number[] = [];
+      for (let i = 0; i < m - 1; i++) {
+        D.push(col[i].localMaxY - col[i + 1].localMinY + padding);
+      }
+
+      const Y = col.map((item) => item.g.offsetY);
+
+      for (let iter = 0; iter < 40; iter++) {
+        for (let i = 0; i < m; i++) {
+          const ideal = col[i].idealOffsetY;
+          const minBound = i > 0 ? Y[i - 1] + D[i - 1] : -Infinity;
+          const maxBound = i < m - 1 ? Y[i + 1] - D[i] : Infinity;
+
+          if (minBound <= maxBound) {
+            const target = Math.max(minBound, Math.min(maxBound, ideal));
+            Y[i] += (target - Y[i]) * 0.4;
+          }
+        }
+
+        for (let i = 0; i < m - 1; i++) {
+          if (Y[i + 1] < Y[i] + D[i]) {
+            const overlap = Y[i] + D[i] - Y[i + 1];
+            Y[i] -= overlap / 2;
+            Y[i + 1] += overlap / 2;
+          }
+        }
+
+        for (let i = m - 2; i >= 0; i--) {
+          if (Y[i] > Y[i + 1] - D[i]) {
+            const overlap = Y[i] - (Y[i + 1] - D[i]);
+            Y[i] -= overlap / 2;
+            Y[i + 1] += overlap / 2;
+          }
+        }
+      }
+
+      for (let i = 0; i < m; i++) {
+        col[i].g.offsetY = Y[i];
+      }
     }
   }
 
@@ -2371,6 +2970,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       const graph = this.graphs[i];
       if (graph) {
         graph.offsetY = i * paddingY;
+        graph.baseOffsetY = i * paddingY;
       }
     }
     this.updateChart_Ring();
@@ -2428,9 +3028,13 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                   }
                 } else {
                   const targetStealthAddress = rm.hash;
-                  const matchNode = parentGraph.outputRoot
-                    .leaves()
-                    .find((leaf: any) => leaf.data.stealth_address === targetStealthAddress);
+                  if (!parentGraph.connectedOutputStealths) {
+                    parentGraph.connectedOutputStealths = new Set<string>();
+                  }
+                  parentGraph.connectedOutputStealths.add(targetStealthAddress);
+                  this.refreshGraphOutputs(parentGraph);
+
+                  const matchNode = this.findOutputNodeByStealth(parentGraph, targetStealthAddress);
 
                   if (matchNode) {
                     if (!graph.extraConnectors) graph.extraConnectors = [];
@@ -2468,6 +3072,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       const graph = this.graphs[i];
       if (graph) {
         graph.offsetY = i * paddingY;
+        graph.baseOffsetY = i * paddingY;
       }
     }
     this.updateChart_Legacy();
@@ -2513,9 +3118,13 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               }
             } else {
               const targetStealthAddress = rm.hash;
-              const matchNode = parentGraph.outputRoot
-                .leaves()
-                .find((leaf: any) => leaf.data.stealth_address === targetStealthAddress);
+              if (!parentGraph.connectedOutputStealths) {
+                parentGraph.connectedOutputStealths = new Set<string>();
+              }
+              parentGraph.connectedOutputStealths.add(targetStealthAddress);
+              this.refreshGraphOutputs(parentGraph);
+
+              const matchNode = this.findOutputNodeByStealth(parentGraph, targetStealthAddress);
 
               if (matchNode) {
                 if (!graph.extraConnectors) graph.extraConnectors = [];
@@ -2562,6 +3171,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         id: g.id,
         rotationEnabled: g.rotationEnabled,
         expandedNodeIds: Array.from(g.expandedNodeIds),
+        outputsExpanded: g.outputsExpanded,
+        connectedOutputStealths: g.connectedOutputStealths
+          ? Array.from(g.connectedOutputStealths)
+          : [],
       };
     });
 
@@ -2643,8 +3256,17 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       this.addTransactionToGraph(mappedRoot, null, false, rootInfo.rotationEnabled);
 
       const rootGraph = this.graphs.find((g) => g.id === rootInfo.id);
-      if (rootGraph && rootInfo.expandedNodeIds) {
-        rootInfo.expandedNodeIds.forEach((id) => rootGraph.expandedNodeIds.add(id));
+      if (rootGraph) {
+        if (rootInfo.expandedNodeIds) {
+          rootInfo.expandedNodeIds.forEach((id) => rootGraph.expandedNodeIds.add(id));
+        }
+        if (rootInfo.connectedOutputStealths) {
+          rootGraph.connectedOutputStealths = new Set(rootInfo.connectedOutputStealths);
+        }
+        if (rootInfo.outputsExpanded !== undefined) {
+          rootGraph.outputsExpanded = rootInfo.outputsExpanded;
+        }
+        this.refreshGraphOutputs(rootGraph);
       }
     }
 
@@ -2677,8 +3299,17 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               this.addTransactionToGraph(mappedTx, alignTarget, false, gInfo.rotationEnabled);
 
               const newGraph = this.graphs.find((g) => g.id === gInfo.id);
-              if (newGraph && gInfo.expandedNodeIds) {
-                gInfo.expandedNodeIds.forEach((id) => newGraph.expandedNodeIds.add(id));
+              if (newGraph) {
+                if (gInfo.expandedNodeIds) {
+                  gInfo.expandedNodeIds.forEach((id) => newGraph.expandedNodeIds.add(id));
+                }
+                if (gInfo.connectedOutputStealths) {
+                  newGraph.connectedOutputStealths = new Set(gInfo.connectedOutputStealths);
+                }
+                if (gInfo.outputsExpanded !== undefined) {
+                  newGraph.outputsExpanded = gInfo.outputsExpanded;
+                }
+                this.refreshGraphOutputs(newGraph);
               }
             }
           }
