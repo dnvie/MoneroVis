@@ -1,4 +1,5 @@
 .footerContainer {
+  height: 60px;
   width: 100%;
   display: flex;
   justify-content: center;
@@ -12,17 +13,15 @@ a {
 
 .footerFrame {
   width: var(--frameWidth);
-  min-height: 50px;
+  height: 50px;
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   background-color: var(--searchBackground);
   border: var(--txGraphBorder);
   border-radius: 10px;
-  gap: 0;
-  padding: 10px 0;
+  gap: 10px;
 }
 
 .footerContent {
@@ -67,29 +66,12 @@ a {
   position: relative;
 }
 
-@media only screen and (max-width: 500px) {
+@media only screen and (max-width: 450px) {
+  .footerContent--right {
+    display: none;
+  }
+
   .footerFrame {
     justify-content: center;
-    padding: 12px 0;
-    gap: 10px;
-  }
-
-  .footerContent {
-    width: 100%;
-    justify-content: center;
-
-    &--left {
-      padding-left: 0;
-      order: 2;
-    }
-
-    &--right {
-      padding-right: 0;
-      order: 1;
-    }
-  }
-
-  .footerImage {
-    top: 0;
   }
 }
