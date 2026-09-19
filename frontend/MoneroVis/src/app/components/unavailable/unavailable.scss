@@ -1,0 +1,167 @@
+:host {
+  display: flex;
+  flex: 1;
+  width: 100%;
+}
+
+.unavailableFrame {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
+  box-sizing: border-box;
+  background-color: var(--background);
+}
+
+.unavailableContainer {
+  max-width: 550px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-family: 'Inter Tight', sans-serif;
+  color: var(--text);
+}
+
+.unavailableHeading {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+
+.unavailableSubheading {
+  font-size: 15px;
+  color: var(--text);
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+  max-width: 550px;
+}
+
+.unavailableNotice {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--textLighter);
+  margin: 0 0 28px 0;
+  max-width: 550px;
+}
+
+.actionButtons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: #f26822;
+  color: #ffffff;
+  border: 1px solid #f26822;
+  border-radius: 8px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background-color: #e05b18;
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .retryIcon {
+    flex-shrink: 0;
+    display: inline-block;
+    transform-origin: center;
+
+    &.spinning {
+      animation: spin 0.6s ease-in-out;
+    }
+  }
+}
+
+.githubButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: var(--searchBackground);
+  color: var(--text);
+  border: var(--txGraphBorder);
+  border-radius: 8px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+
+  &:hover {
+    border-color: #f26822;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media only screen and (max-width: 550px) {
+  .unavailableFrame {
+    padding: 30px 16px;
+  }
+
+  .unavailableHeading {
+    font-size: 26px;
+  }
+
+  .unavailableSubheading {
+    font-size: 15px;
+  }
+
+  .unavailableNotice {
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+
+  .actionButtons {
+    flex-direction: column;
+    gap: 10px;
+
+    .retryButton,
+    .githubButton {
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
+}

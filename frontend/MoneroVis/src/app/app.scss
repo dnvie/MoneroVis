@@ -5,3 +5,22 @@
   overflow-x: hidden;
   min-height: calc(100vh + 60px);
 }
+
+.unavailableLayout {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background-color: var(--background);
+  box-sizing: border-box;
+  overflow-x: hidden;
+
+  app-unavailable {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+}
