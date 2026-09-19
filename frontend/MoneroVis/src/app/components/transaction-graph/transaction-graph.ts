@@ -61,6 +61,8 @@ interface GraphInstance {
   allOutputs: any[];
   outputsExpanded: boolean;
   connectedOutputStealths: Set<string>;
+  allInputs: any[];
+  inputsExpanded: boolean;
 }
 
 interface GraphSaveFile {
@@ -76,6 +78,7 @@ interface GraphSaveFile {
     rotationEnabled?: boolean;
     expandedNodeIds: string[];
     outputsExpanded?: boolean;
+    inputsExpanded?: boolean;
     connectedOutputStealths?: string[];
   }[];
 }
@@ -242,6 +245,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       rotationEnabled: g.rotationEnabled,
       connectedOutputStealths: g.connectedOutputStealths,
       outputsExpanded: g.outputsExpanded,
+      inputsExpanded: g.inputsExpanded,
     }));
 
     if (this.svgSelection && this.svgSelection.node()) {
@@ -273,6 +277,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           if (rootInfo.outputsExpanded !== undefined) {
             rootGraph.outputsExpanded = rootInfo.outputsExpanded;
           }
+          if (rootInfo.inputsExpanded !== undefined) {
+            rootGraph.inputsExpanded = rootInfo.inputsExpanded;
+          }
+          this.refreshGraphInputs(rootGraph);
           this.refreshGraphOutputs(rootGraph);
         }
       }
@@ -311,6 +319,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                   if (gInfo.outputsExpanded !== undefined) {
                     newGraph.outputsExpanded = gInfo.outputsExpanded;
                   }
+                  if (gInfo.inputsExpanded !== undefined) {
+                    newGraph.inputsExpanded = gInfo.inputsExpanded;
+                  }
+                  this.refreshGraphInputs(newGraph);
                   this.refreshGraphOutputs(newGraph);
                 }
               }
@@ -320,6 +332,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       }
 
       this.restoreExtraConnectors(graphsToRestore);
+
+      if (this.mergingResults && this.mergingResults.length > 0) {
+        this.graphs.forEach((g) => this.refreshGraphInputs(g));
+      }
 
       this.updateChart();
     } else if (this.initialTransaction) {
@@ -336,15 +352,29 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     rmId: string,
   ): { d3Node: any; ringMemberData: any } | null {
     if (this.currentMode() === 'ring') {
-      const leaf = graph.inputRoot
+      let leaf = graph.inputRoot
         .leaves()
         .find((node: any) => node.data.ring_members?.some((rm: any) => rm.id === rmId));
+      if (!leaf && graph.allInputs) {
+        if (!graph.expandedNodeIds) graph.expandedNodeIds = new Set();
+        graph.expandedNodeIds.add(rmId);
+        this.refreshGraphInputs(graph);
+        leaf = graph.inputRoot
+          .leaves()
+          .find((node: any) => node.data.ring_members?.some((rm: any) => rm.id === rmId));
+      }
       if (leaf) {
         const rm = leaf.data.ring_members.find((rm: any) => rm.id === rmId);
         return { d3Node: leaf, ringMemberData: rm };
       }
     } else {
-      const node = graph.inputRoot.descendants().find((node: any) => node.data.id === rmId);
+      let node = graph.inputRoot.descendants().find((n: any) => n.data.id === rmId);
+      if (!node && graph.allInputs) {
+        if (!graph.expandedNodeIds) graph.expandedNodeIds = new Set();
+        graph.expandedNodeIds.add(rmId);
+        this.refreshGraphInputs(graph);
+        node = graph.inputRoot.descendants().find((n: any) => n.data.id === rmId);
+      }
       if (node) {
         return { d3Node: node, ringMemberData: node.data };
       }
@@ -577,6 +607,169 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     this.updateChart();
   }
 
+  private getConnectedRingMembersForGraph(graph: GraphInstance): {
+    ids: Set<string>;
+    hashes: Set<string>;
+  } {
+    const ids = new Set<string>();
+    const hashes = new Set<string>();
+
+    if (graph.expandedNodeIds) {
+      graph.expandedNodeIds.forEach((id) => ids.add(id));
+    }
+
+    this.graphs.forEach((g) => {
+      if (g.connector && g.connector.originGraphId === graph.id) {
+        if (g.connector.originNodeId) ids.add(g.connector.originNodeId);
+        const targetStealth =
+          g.connector.targetNode?.data?.stealth_address ||
+          g.connector.targetNode?.data?.hash;
+        if (targetStealth) hashes.add(targetStealth);
+      }
+    });
+
+    if (graph.extraConnectors) {
+      graph.extraConnectors.forEach((ec) => {
+        const id = ec.originNodeData?.id || ec.originNode?.data?.id;
+        if (id) ids.add(id);
+
+        const hash =
+          ec.originNodeData?.hash ||
+          ec.originNodeData?.output_stealth_address ||
+          ec.originNode?.data?.hash ||
+          ec.originNode?.data?.output_stealth_address;
+        if (hash) hashes.add(hash);
+      });
+    }
+
+    return { ids, hashes };
+  }
+
+  private isInputConnected(
+    input: any,
+    connected: { ids: Set<string>; hashes: Set<string> },
+  ): boolean {
+    const ringMembers = input.ring_members || input.children || [];
+    return ringMembers.some((rm: any) => {
+      if (rm.id && connected.ids.has(rm.id)) return true;
+      const rmHash = rm.hash || rm.output_stealth_address;
+      if (rmHash && connected.hashes.has(rmHash)) return true;
+      if (
+        this.highlightedAddress &&
+        (rm.hash === this.highlightedAddress ||
+          rm.output_stealth_address === this.highlightedAddress)
+      ) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  public refreshGraphInputs(graph: GraphInstance): void {
+    if (!graph.allInputs || graph.allInputs.length === 0) {
+      const rawTx = (graph.inputRoot?.data?.raw || graph.outputRoot?.data?.raw) as Transaction;
+      if (rawTx && rawTx.inputs) {
+        if (this.currentMode() === 'ring') {
+          const mapped = this.mapApiToD3_Ring(rawTx);
+          graph.allInputs = mapped.inputs || [];
+        } else {
+          const mapped = this.mapApiToD3_Legacy(rawTx);
+          graph.allInputs = mapped.inputs || [];
+        }
+      } else {
+        graph.allInputs = [];
+      }
+    }
+
+    const totalInputs = graph.allInputs.length;
+    let visibleInputs: any[] = [];
+
+    const isTracing = !!(this.mergingResults && this.mergingResults.length > 0);
+
+    if (!isTracing) {
+      visibleInputs = [...graph.allInputs];
+    } else {
+      const connected = this.getConnectedRingMembersForGraph(graph);
+      const explicitInputs = graph.allInputs.filter((input) =>
+        this.isInputConnected(input, connected),
+      );
+      const hiddenInputs = graph.allInputs.filter(
+        (input) => !this.isInputConnected(input, connected),
+      );
+
+      if (hiddenInputs.length <= 1) {
+        visibleInputs = [...graph.allInputs];
+      } else if (graph.inputsExpanded) {
+        visibleInputs = [
+          ...graph.allInputs,
+          {
+            id: `in-collapse-${graph.id}`,
+            type: 'input_collapse',
+            tx_hash: graph.id,
+          },
+        ];
+      } else {
+        visibleInputs = [...explicitInputs];
+        visibleInputs.push({
+          id: `in-bubble-${graph.id}`,
+          type: 'input_bubble',
+          count: hiddenInputs.length,
+          totalCount: totalInputs,
+          bundledInputs: hiddenInputs,
+          tx_hash: graph.id,
+        });
+      }
+    }
+
+    const txData = graph.inputRoot?.data || graph.outputRoot?.data;
+    if (txData) {
+      txData.inputs = visibleInputs;
+      if (this.currentMode() === 'ring') {
+        const newInputRoot = d3.hierarchy(txData, (d: any) => d.inputs);
+        graph.inputRoot = newInputRoot;
+        this.updateGraphLayout_Ring(graph);
+      } else {
+        const newInputRoot = d3.hierarchy(txData, (d: any) => d.inputs || d.children);
+        newInputRoot.children?.forEach((inputNode: any) => {
+          if (inputNode.children) {
+            inputNode._allChildren = inputNode.children;
+          }
+        });
+        graph.inputRoot = newInputRoot;
+        this.updateGraphLayout_Legacy(graph);
+      }
+    }
+
+    if (graph.extraConnectors) {
+      graph.extraConnectors.forEach((ec) => {
+        const rmId = ec.originNodeData?.id || ec.originNode?.data?.id;
+        if (rmId) {
+          const matchNode = graph.inputRoot
+            .descendants()
+            .find((d: any) => d.data.id === rmId);
+          if (matchNode) {
+            ec.originNode = matchNode;
+          } else {
+            const context = this.findRingMemberContext(graph, rmId);
+            if (context) {
+              ec.originNode = context.d3Node;
+            }
+          }
+        }
+      });
+    }
+  }
+
+  public toggleInputsExpanded(graph: GraphInstance): void {
+    this.hideTooltip();
+    if (this.svgSelection && this.svgSelection.node()) {
+      this.preservedZoom = d3.zoomTransform(this.svgSelection.node() as Element);
+    }
+    graph.inputsExpanded = !graph.inputsExpanded;
+    this.refreshGraphInputs(graph);
+    this.updateChart();
+  }
+
   private restoreExtraConnectors(oldGraphs: any[]) {
     for (const gInfo of oldGraphs) {
       if (gInfo.extraConnectors) {
@@ -584,15 +777,21 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         if (!newGraph) continue;
 
         for (const ec of gInfo.extraConnectors) {
-          const targetGraphId = ec.targetGraph.id;
+          const targetGraphId = ec.targetGraph?.id || ec.targetGraphId;
           const targetGraph = this.graphs.find((ng) => ng.id === targetGraphId);
 
           if (targetGraph) {
-            const context = this.findRingMemberContext(newGraph, ec.originNodeData.id);
-            const targetNode = this.findOutputNodeByStealth(
-              targetGraph,
-              ec.targetNode.data.stealth_address,
-            );
+            const originId = ec.originNodeData?.id || ec.originNode?.data?.id || ec.originNodeId;
+            if (!originId) continue;
+            const context = this.findRingMemberContext(newGraph, originId);
+            const targetStealth =
+              ec.targetNode?.data?.stealth_address ||
+              ec.targetNodeStealth ||
+              ec.originNodeData?.hash ||
+              ec.originNode?.data?.hash;
+            const targetNode = targetStealth
+              ? this.findOutputNodeByStealth(targetGraph, targetStealth)
+              : null;
 
             if (context && targetNode) {
               if (!newGraph.extraConnectors) newGraph.extraConnectors = [];
@@ -624,6 +823,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
   }
 
   public processAndRenderTransaction(data: Transaction): void {
+    this.mergingResults = null;
     if (data && data.tx_hash) {
       this.currentActiveHash = data.tx_hash;
     }
@@ -733,6 +933,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       id: tx.tx_hash,
       type: 'tx',
       inputs: inputs,
+      allInputs: inputs,
       outputs: outputs,
       allOutputs: outputs,
       block_height: txBlockHeight,
@@ -786,6 +987,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       allOutputs: txData.allOutputs || txData.outputs || [],
       outputsExpanded: false,
       connectedOutputStealths: new Set<string>(),
+      allInputs: txData.allInputs || txData.inputs || [],
+      inputsExpanded: false,
       offsetX: 0,
       offsetY: 0,
       baseOffsetY: 0,
@@ -819,7 +1022,15 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       const measure = (n: any) => {
         let r = 10;
         if (n.data.type === 'input') r = 90;
-        if (n.data.type === 'tx' || n.data.type === 'coinbase_start' || n.data.type === 'output_bubble' || n.data.type === 'output_collapse') r = 15;
+        if (
+          n.data.type === 'tx' ||
+          n.data.type === 'coinbase_start' ||
+          n.data.type === 'output_bubble' ||
+          n.data.type === 'output_collapse' ||
+          n.data.type === 'input_bubble' ||
+          n.data.type === 'input_collapse'
+        )
+          r = 15;
         if (n.x - r < newMinY) newMinY = n.x - r;
         if (n.x + r > newMaxY) newMaxY = n.x + r;
       };
@@ -838,7 +1049,15 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         const measureG = (n: any) => {
           let r = 10;
           if (n.data.type === 'input') r = 90;
-          if (n.data.type === 'tx' || n.data.type === 'coinbase_start' || n.data.type === 'output_bubble' || n.data.type === 'output_collapse') r = 15;
+          if (
+            n.data.type === 'tx' ||
+            n.data.type === 'coinbase_start' ||
+            n.data.type === 'output_bubble' ||
+            n.data.type === 'output_collapse' ||
+            n.data.type === 'input_bubble' ||
+            n.data.type === 'input_collapse'
+          )
+            r = 15;
           const absY = n.x + g.offsetY;
           if (absY - r < gMinY) gMinY = absY - r;
           if (absY + r > gMaxY) gMaxY = absY + r;
@@ -895,6 +1114,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     if (!this.treeContainer) return;
     const element = this.treeContainer.nativeElement;
     const { width, height } = element.getBoundingClientRect();
+
+    this.graphs.forEach((g) => this.prepareGraphData_Ring(g));
 
     if (this.graphs.length > 0) {
       this.resolveCollisions_Ring();
@@ -964,6 +1185,9 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           d3.zoomIdentity.translate(initialTranslateX, initialTranslateY),
         );
       }
+    } else if (this.preservedZoom) {
+      this.svgSelection.call(this.zoomBehavior.transform, this.preservedZoom);
+      this.preservedZoom = null;
     }
 
     this.svgSelection.attr('width', drawWidth).attr('height', drawHeight);
@@ -1038,11 +1262,18 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         const parentGraph = this.graphs.find((g) => g.id === graph.connector!.originGraphId);
 
         if (parentGraph) {
-          const inputNode = parentGraph.inputRoot
+          let inputNode = parentGraph.inputRoot
             .leaves()
             .find((n: any) =>
               n.data.ring_members?.some((rm: any) => rm.id === graph.connector!.originNodeId),
             );
+          if (!inputNode) {
+            const context = this.findRingMemberContext(parentGraph, graph.connector!.originNodeId);
+            if (context) inputNode = context.d3Node;
+          }
+          if (inputNode && !inputNode.data.arcs) {
+            this.prepareGraphData_Ring(parentGraph);
+          }
           if (inputNode && inputNode.data.arcs) {
             const arc = inputNode.data.arcs.find(
               (a: any) => a.data.id === graph.connector!.originNodeId,
@@ -1084,14 +1315,22 @@ export class TransactionGraph implements OnDestroy, OnChanges {
 
       if (graph.extraConnectors) {
         graph.extraConnectors.forEach((extra) => {
-          bridgeOutputs.add(extra.targetNode.data.id);
-          const inputNode = graph.inputRoot
+          const originId = extra.originNodeData?.id || extra.originNode?.data?.id;
+          if (extra.targetNode?.data?.id) bridgeOutputs.add(extra.targetNode.data.id);
+          let inputNode = graph.inputRoot
             .leaves()
             .find((n: any) =>
-              n.data.ring_members?.some((rm: any) => rm.id === extra.originNodeData.id),
+              n.data.ring_members?.some((rm: any) => rm.id === originId),
             );
+          if (!inputNode && originId) {
+            const context = this.findRingMemberContext(graph, originId);
+            if (context) inputNode = context.d3Node;
+          }
+          if (inputNode && !inputNode.data.arcs) {
+            this.prepareGraphData_Ring(graph);
+          }
           if (inputNode && inputNode.data.arcs) {
-            const arc = inputNode.data.arcs.find((a: any) => a.data.id === extra.originNodeData.id);
+            const arc = inputNode.data.arcs.find((a: any) => a.data.id === originId);
             if (arc) {
               const centerX = inputNode.y! + graph.offsetX;
               const centerY = inputNode.x! + graph.offsetY;
@@ -1112,7 +1351,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               const cp2x = endX + 50;
               const cp2y = endY;
               const pathData = `M ${origin.x},${origin.y} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${endX},${endY}`;
-              this.drawBridgeLink_Ring(bridgesLayer, pathData, extra.originNodeData.id);
+              this.drawBridgeLink_Ring(bridgesLayer, pathData, originId);
             }
           }
         });
@@ -1301,6 +1540,82 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               `<strong>COLLAPSE</strong><br>Click to collapse outputs into bubble`,
             );
           }).on('mouseout', () => this.hideTooltip());
+        } else if (type === 'input_bubble') {
+          const count = d.data.count;
+          const isPartial = d.data.count < d.data.totalCount;
+          const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+          const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+          const pillHeight = 22;
+
+          el.append('rect')
+            .attr('class', 'bubble-rect')
+            .attr('x', -textWidth / 2)
+            .attr('y', -pillHeight / 2)
+            .attr('width', textWidth)
+            .attr('height', pillHeight)
+            .attr('rx', pillHeight / 2)
+            .style('fill', 'var(--graphNodeFill)')
+            .style('stroke', '#00bcd4')
+            .style('stroke-width', '1.5px');
+
+          el.append('text')
+            .attr('dy', 3.5)
+            .attr('text-anchor', 'middle')
+            .text(labelText)
+            .style('fill', 'var(--graphText)')
+            .style('font-size', '10px')
+            .style('font-weight', '500')
+            .style('font-family', 'Google Sans Code')
+            .style('pointer-events', 'none');
+
+          el.style('cursor', 'pointer');
+          el.on('click', (e: MouseEvent) => {
+            e.stopPropagation();
+            this.toggleInputsExpanded(graph);
+          });
+          el.on('mouseover', (e: MouseEvent) => {
+            this.showTooltip(
+              e,
+              `<strong>${count} INPUTS</strong><br>Click to expand all inputs`,
+            );
+          }).on('mouseout', () => this.hideTooltip());
+        } else if (type === 'input_collapse') {
+          const labelText = '▲ Collapse';
+          const textWidth = 75;
+          const pillHeight = 20;
+
+          el.append('rect')
+            .attr('class', 'collapse-rect')
+            .attr('x', -textWidth / 2)
+            .attr('y', -pillHeight / 2)
+            .attr('width', textWidth)
+            .attr('height', pillHeight)
+            .attr('rx', pillHeight / 2)
+            .style('fill', 'var(--graphNodeFill)')
+            .style('stroke', '#888')
+            .style('stroke-dasharray', '3, 2')
+            .style('stroke-width', '1px');
+
+          el.append('text')
+            .attr('dy', 3.5)
+            .attr('text-anchor', 'middle')
+            .text(labelText)
+            .style('fill', 'var(--graphText)')
+            .style('font-size', '9px')
+            .style('font-family', 'Google Sans Code')
+            .style('pointer-events', 'none');
+
+          el.style('cursor', 'pointer');
+          el.on('click', (e: MouseEvent) => {
+            e.stopPropagation();
+            this.toggleInputsExpanded(graph);
+          });
+          el.on('mouseover', (e: MouseEvent) => {
+            this.showTooltip(
+              e,
+              `<strong>COLLAPSE</strong><br>Click to collapse inputs into bubble`,
+            );
+          }).on('mouseout', () => this.hideTooltip());
         } else if (type === 'input') {
           if (d.data.arcs) {
             const handleRingClick = (e: MouseEvent, arc: any) => {
@@ -1390,6 +1705,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       };
 
       [graph.inputRoot, graph.outputRoot].forEach((root) => {
+        const isInputRoot = root === graph.inputRoot;
+        const rootKey = isInputRoot ? 'in' : 'out';
         const links = root.links();
         const allNodes = root.descendants();
         const bottomNodes = allNodes.filter(
@@ -1397,25 +1714,30 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             d.data.type !== 'output' &&
             d.data.type !== 'output_bubble' &&
             d.data.type !== 'output_collapse' &&
+            d.data.type !== 'input_bubble' &&
+            d.data.type !== 'input_collapse' &&
             d.data.type !== 'tx' &&
             d.data.type !== 'coinbase_start',
         );
         const topNodes = allNodes.filter(
           (d: any) =>
-            d.data.type === 'output' ||
-            d.data.type === 'output_bubble' ||
-            d.data.type === 'output_collapse' ||
-            d.data.type === 'tx' ||
-            d.data.type === 'coinbase_start',
+            (isInputRoot || d.data.type !== 'tx') &&
+            (d.data.type === 'output' ||
+              d.data.type === 'output_bubble' ||
+              d.data.type === 'output_collapse' ||
+              d.data.type === 'input_bubble' ||
+              d.data.type === 'input_collapse' ||
+              d.data.type === 'tx' ||
+              d.data.type === 'coinbase_start'),
         );
 
         linksLayer
-          .selectAll(`path.link-${graph.id}-${root.data.type}`)
+          .selectAll(`path.link-${graph.id}-${rootKey}`)
           .data(links)
           .enter()
           .append('path')
           .attr('class', (d: any) => {
-            let c = 'link';
+            let c = `link link-${graph.id}-${rootKey}`;
             if (
               d.source.data.type === 'tx' &&
               d.target.data.type === 'output' &&
@@ -1427,6 +1749,11 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               d.target.data.type === 'output_collapse'
             )
               c += ' output-bubble-link';
+            if (
+              d.target.data.type === 'input_bubble' ||
+              d.target.data.type === 'input_collapse'
+            )
+              c += ' input-bubble-link';
             return c;
           })
           .attr(
@@ -1435,27 +1762,45 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               .linkHorizontal()
               .x((d: any) => {
                 let x = d.y + graph.offsetX;
-                if (d.data.type === 'input') x += MAX_RADIUS + MAX_THICKNESS + OUTER_EDGE_BUFFER;
+                if (d.data.type === 'input') {
+                  x += MAX_RADIUS + MAX_THICKNESS + OUTER_EDGE_BUFFER;
+                } else if (d.data.type === 'input_bubble') {
+                  const count = d.data.count;
+                  const isPartial = count < d.data.totalCount;
+                  const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+                  const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+                  x += textWidth / 2;
+                } else if (d.data.type === 'input_collapse') {
+                  x += 37.5;
+                } else if (d.data.type === 'output_bubble') {
+                  const count = d.data.count;
+                  const isPartial = count < d.data.totalCount;
+                  const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+                  const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+                  x -= textWidth / 2;
+                } else if (d.data.type === 'output_collapse') {
+                  x -= 37.5;
+                }
                 return x;
               })
               .y((d: any) => d.x + graph.offsetY),
           );
 
         nodesLayerBottom
-          .selectAll(`g.node-bottom-${graph.id}-${root.data.type}`)
+          .selectAll(`g.node-bottom-${graph.id}-${rootKey}`)
           .data(bottomNodes)
           .enter()
           .append('g')
-          .attr('class', 'node node-input')
+          .attr('class', `node node-input node-bottom-${graph.id}-${rootKey}`)
           .attr('transform', (d: any) => `translate(${d.y + graph.offsetX},${d.x + graph.offsetY})`)
           .each(drawNodeContent);
 
         nodesLayerTop
-          .selectAll(`g.node-top-${graph.id}-${root.data.type}`)
+          .selectAll(`g.node-top-${graph.id}-${rootKey}`)
           .data(topNodes)
           .enter()
           .append('g')
-          .attr('class', (d: any) => `node node-${d.data.type.replace(/_/g, '-')}`)
+          .attr('class', (d: any) => `node node-${d.data.type.replace(/_/g, '-')} node-top-${graph.id}-${rootKey}`)
           .attr('transform', (d: any) => `translate(${d.y + graph.offsetX},${d.x + graph.offsetY})`)
           .each(drawNodeContent);
       });
@@ -1466,6 +1811,14 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     this.hideTooltip();
     event.stopPropagation();
     const type = d.data.type;
+    if (type === 'output_bubble' || type === 'output_collapse') {
+      this.toggleOutputsExpanded(graph);
+      return;
+    }
+    if (type === 'input_bubble' || type === 'input_collapse') {
+      this.toggleInputsExpanded(graph);
+      return;
+    }
     if (type === 'tx') {
       event.preventDefault();
       const currentLabelData = this.txLabels.get(d.data.id) || { text: '', color: '#e04f5f' };
@@ -1586,16 +1939,23 @@ export class TransactionGraph implements OnDestroy, OnChanges {
   private removeDownstreamGraphs_Ring(ringMemberIds: string[]): void {
     this.graphs.forEach((g) => {
       if (g.extraConnectors) {
-        const removed = g.extraConnectors.filter((ec) =>
-          ringMemberIds.includes(ec.originNodeData.id),
-        );
-        g.extraConnectors = g.extraConnectors.filter(
-          (ec) => !ringMemberIds.includes(ec.originNodeData.id),
-        );
+        const removed = g.extraConnectors.filter((ec) => {
+          const id = ec.originNodeData?.id || ec.originNode?.data?.id;
+          return id && ringMemberIds.includes(id);
+        });
+        g.extraConnectors = g.extraConnectors.filter((ec) => {
+          const id = ec.originNodeData?.id || ec.originNode?.data?.id;
+          return !id || !ringMemberIds.includes(id);
+        });
         removed.forEach((ec) => {
           const targetG = ec.targetGraph;
-          if (targetG && targetG.connectedOutputStealths) {
-            targetG.connectedOutputStealths.delete(ec.originNodeData.hash);
+          const hash =
+            ec.originNodeData?.hash ||
+            ec.originNodeData?.output_stealth_address ||
+            ec.originNode?.data?.hash ||
+            ec.originNode?.data?.output_stealth_address;
+          if (targetG && targetG.connectedOutputStealths && hash) {
+            targetG.connectedOutputStealths.delete(hash);
             this.refreshGraphOutputs(targetG);
           }
         });
@@ -1608,19 +1968,21 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     if (graphsToRemove.length === 0) return;
 
     graphsToRemove.forEach((g) => {
-      const allInputNodes = g.inputRoot.leaves();
+      const allInputs = g.allInputs && g.allInputs.length > 0 ? g.allInputs : g.inputRoot.leaves().map((l: any) => l.data);
       const allRingMemberIds: string[] = [];
-      allInputNodes.forEach((inode: any) => {
-        if (inode.data.ring_members) {
-          inode.data.ring_members.forEach((rm: any) => allRingMemberIds.push(rm.id));
+      allInputs.forEach((inode: any) => {
+        const rms = inode.ring_members || inode.children;
+        if (rms) {
+          rms.forEach((rm: any) => allRingMemberIds.push(rm.id));
         }
       });
       this.removeDownstreamGraphs_Ring(allRingMemberIds);
       const parentGraph = this.graphs.find((pg) => {
-        const inputs = pg.inputRoot.leaves();
-        return inputs.some((inode: any) =>
-          inode.data.ring_members?.some((rm: any) => rm.id === g.connector!.originNodeId),
-        );
+        const inputs = pg.allInputs && pg.allInputs.length > 0 ? pg.allInputs : pg.inputRoot.leaves().map((l: any) => l.data);
+        return inputs.some((inode: any) => {
+          const rms = inode.ring_members || inode.children;
+          return rms?.some((rm: any) => rm.id === g.connector!.originNodeId);
+        });
       });
       if (parentGraph && g.connector) {
         parentGraph.expandedNodeIds.delete(g.connector.originNodeId);
@@ -1629,6 +1991,9 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     const idsToRemove = new Set(graphsToRemove.map((g) => g.id));
     this.graphs = this.graphs.filter((g) => !idsToRemove.has(g.id));
     this.graphs.forEach((g) => this.refreshGraphOutputs(g));
+    if (this.mergingResults && this.mergingResults.length > 0) {
+      this.graphs.forEach((g) => this.refreshGraphInputs(g));
+    }
   }
 
   private drawBridgeLink_Ring(container: any, pathData: string, originId: string) {
@@ -1720,7 +2085,12 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         } else if (node.data.type === 'tx' || node.data.type === 'coinbase_start') {
           rY = 15;
           rX = 50;
-        } else if (node.data.type === 'output_bubble' || node.data.type === 'output_collapse') {
+        } else if (
+          node.data.type === 'output_bubble' ||
+          node.data.type === 'output_collapse' ||
+          node.data.type === 'input_bubble' ||
+          node.data.type === 'input_collapse'
+        ) {
           rY = 15;
           rX = 45;
         } else {
@@ -1868,6 +2238,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       id: tx.tx_hash,
       type: 'tx',
       inputs: inputs,
+      allInputs: inputs,
       outputs: outputs,
       allOutputs: outputs,
       block_height: txBlockHeight,
@@ -1893,7 +2264,12 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         return LEGACY_MIN_RADIUS + ratio * (LEGACY_MAX_RADIUS - LEGACY_MIN_RADIUS);
       } else if (node.data.type === 'output') {
         return 5;
-      } else if (node.data.type === 'output_bubble' || node.data.type === 'output_collapse') {
+      } else if (
+        node.data.type === 'output_bubble' ||
+        node.data.type === 'output_collapse' ||
+        node.data.type === 'input_bubble' ||
+        node.data.type === 'input_collapse'
+      ) {
         return 10;
       } else if (node.data.type === 'input') {
         return 6;
@@ -2048,6 +2424,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       id: txData.id,
       inputRoot,
       outputRoot,
+      allInputs: txData.allInputs || txData.inputs || [],
+      inputsExpanded: false,
       allOutputs: txData.allOutputs || txData.outputs || [],
       outputsExpanded: false,
       connectedOutputStealths: new Set<string>(),
@@ -2078,7 +2456,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       const safeLimitX = minSiblingX - 100;
       const idealX = alignTarget.absoluteX;
       const finalConnectX = Math.min(idealX, safeLimitX);
-      const idealOffsetY = alignTarget.graphCenterY;
+      const targetNodeX = matchNode && typeof matchNode.x === 'number' ? matchNode.x : 0;
+      const idealOffsetY = alignTarget.absoluteY - targetNodeX;
       let proposedOffsetX = safeLimitX - 300;
       if (matchNode && typeof matchNode.y === 'number') {
         proposedOffsetX = finalConnectX - matchNode.y;
@@ -2153,14 +2532,14 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           originGraphId: alignTarget.originGraphId,
           originNodeId: alignTarget.data.id,
           targetNode: matchNode,
-          originY: idealOffsetY,
+          originY: alignTarget.absoluteY,
         };
       } else {
         graph.connector = {
           originGraphId: alignTarget.originGraphId,
           originNodeId: alignTarget.data.id,
           targetNode: { y: 300, x: 0 },
-          originY: idealOffsetY,
+          originY: alignTarget.absoluteY,
         };
       }
     }
@@ -2233,6 +2612,9 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           d3.zoomIdentity.translate(initialTranslateX, initialTranslateY),
         );
       }
+    } else if (this.preservedZoom) {
+      this.svgSelection.call(this.zoomBehavior.transform, this.preservedZoom);
+      this.preservedZoom = null;
     }
     this.svgSelection.attr('width', drawWidth).attr('height', drawHeight);
     element.style.height = `${drawHeight}px`;
@@ -2254,6 +2636,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           let originNode = parentGraph.inputRoot
             .descendants()
             .find((d: any) => d.data.id === graph.connector!.originNodeId);
+          if (!originNode) {
+            const context = this.findRingMemberContext(parentGraph, graph.connector!.originNodeId);
+            if (context) originNode = context.d3Node;
+          }
           if (!originNode)
             originNode = parentGraph.outputRoot
               .descendants()
@@ -2319,6 +2705,11 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               d.target.data.type === 'output_collapse'
             )
               c += ' output-bubble-link';
+            if (
+              d.target.data.type === 'input_bubble' ||
+              d.target.data.type === 'input_collapse'
+            )
+              c += ' input-bubble-link';
             return c;
           })
           .style('stroke', null)
@@ -2331,7 +2722,27 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             'd',
             d3
               .linkHorizontal()
-              .x((d: any) => d.y + graph.offsetX)
+              .x((d: any) => {
+                let x = d.y + graph.offsetX;
+                if (d.data.type === 'input_bubble') {
+                  const count = d.data.count;
+                  const isPartial = count < d.data.totalCount;
+                  const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+                  const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+                  x += textWidth / 2;
+                } else if (d.data.type === 'input_collapse') {
+                  x += 37.5;
+                } else if (d.data.type === 'output_bubble') {
+                  const count = d.data.count;
+                  const isPartial = count < d.data.totalCount;
+                  const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+                  const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+                  x -= textWidth / 2;
+                } else if (d.data.type === 'output_collapse') {
+                  x -= 37.5;
+                }
+                return x;
+              })
               .y((d: any) => d.x + graph.offsetY),
           );
 
@@ -2350,6 +2761,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             if (d.data.type === 'tx') c += ' node-tx';
             if (d.data.type === 'output_bubble') c += ' node-output-bubble';
             if (d.data.type === 'output_collapse') c += ' node-output-collapse';
+            if (d.data.type === 'input_bubble') c += ' node-input-bubble';
+            if (d.data.type === 'input_collapse') c += ' node-input-collapse';
             return c;
           })
           .attr('transform', (d: any) => `translate(${d.y + graph.offsetX},${d.x + graph.offsetY})`)
@@ -2371,9 +2784,13 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               html += `<br>Count: ${d.data.count} outputs<br>Click to expand all outputs`;
             } else if (d.data.type === 'output_collapse') {
               html += `<br>Click to collapse outputs into bubble`;
+            } else if (d.data.type === 'input_bubble') {
+              html += `<br>Count: ${d.data.count} inputs<br>Click to expand all inputs`;
+            } else if (d.data.type === 'input_collapse') {
+              html += `<br>Click to collapse inputs into bubble`;
             } else if (d.data.type === 'input') {
               html += `<br>Key Image: ${d.data.key_image.substring(0, 8)}…${d.data.key_image.slice(-8)}`;
-              html += `<br>Ring Size: ${d.data.children.length}`;
+              html += `<br>Ring Size: ${d.data.children?.length || 0}`;
             }
             this.showTooltip(e, html);
             if (d.data.type === 'ring_member')
@@ -2577,6 +2994,62 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               .style('pointer-events', 'none');
 
             el.style('cursor', 'pointer');
+          } else if (d.data.type === 'input_bubble') {
+            const count = d.data.count;
+            const isPartial = d.data.count < d.data.totalCount;
+            const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+            const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
+            const pillHeight = 22;
+
+            el.append('rect')
+              .attr('class', 'bubble-rect')
+              .attr('x', -textWidth / 2)
+              .attr('y', -pillHeight / 2)
+              .attr('width', textWidth)
+              .attr('height', pillHeight)
+              .attr('rx', pillHeight / 2)
+              .style('fill', 'var(--graphNodeFill)')
+              .style('stroke', '#00bcd4')
+              .style('stroke-width', '1.5px');
+
+            el.append('text')
+              .attr('dy', 3.5)
+              .attr('text-anchor', 'middle')
+              .text(labelText)
+              .style('fill', 'var(--graphText)')
+              .style('font-size', '10px')
+              .style('font-weight', '500')
+              .style('font-family', 'Google Sans Code')
+              .style('pointer-events', 'none');
+
+            el.style('cursor', 'pointer');
+          } else if (d.data.type === 'input_collapse') {
+            const labelText = '▲ Collapse';
+            const textWidth = 75;
+            const pillHeight = 20;
+
+            el.append('rect')
+              .attr('class', 'collapse-rect')
+              .attr('x', -textWidth / 2)
+              .attr('y', -pillHeight / 2)
+              .attr('width', textWidth)
+              .attr('height', pillHeight)
+              .attr('rx', pillHeight / 2)
+              .style('fill', 'var(--graphNodeFill)')
+              .style('stroke', '#888')
+              .style('stroke-dasharray', '3, 2')
+              .style('stroke-width', '1px');
+
+            el.append('text')
+              .attr('dy', 3.5)
+              .attr('text-anchor', 'middle')
+              .text(labelText)
+              .style('fill', 'var(--graphText)')
+              .style('font-size', '9px')
+              .style('font-family', 'Google Sans Code')
+              .style('pointer-events', 'none');
+
+            el.style('cursor', 'pointer');
           } else if (d.data.type === 'input') {
             el.append('path').attr('d', 'M 0,-6 L 6,0 L 0,6 L -6,0 Z').attr('fill', '#00bcd4');
             el.style('cursor', 'default');
@@ -2603,6 +3076,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     const type = d.data.type;
     if (type === 'output_bubble' || type === 'output_collapse') {
       this.toggleOutputsExpanded(graph);
+      return;
+    }
+    if (type === 'input_bubble' || type === 'input_collapse') {
+      this.toggleInputsExpanded(graph);
       return;
     }
     if (type === 'tx') {
@@ -2656,6 +3133,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           if (!graph.extraConnectors) graph.extraConnectors = [];
           graph.extraConnectors.push({
             originNode: d,
+            originNodeData: d.data,
             targetNode: matchNode,
             targetGraph: existingGraph,
           });
@@ -2704,16 +3182,23 @@ export class TransactionGraph implements OnDestroy, OnChanges {
   private removeDownstreamGraphs_Legacy(ringMemberIds: string[]): void {
     this.graphs.forEach((g) => {
       if (g.extraConnectors) {
-        const removed = g.extraConnectors.filter((ec) =>
-          ringMemberIds.includes(ec.originNode.data.id),
-        );
-        g.extraConnectors = g.extraConnectors.filter(
-          (ec) => !ringMemberIds.includes(ec.originNode.data.id),
-        );
+        const removed = g.extraConnectors.filter((ec) => {
+          const id = ec.originNodeData?.id || ec.originNode?.data?.id;
+          return id && ringMemberIds.includes(id);
+        });
+        g.extraConnectors = g.extraConnectors.filter((ec) => {
+          const id = ec.originNodeData?.id || ec.originNode?.data?.id;
+          return !id || !ringMemberIds.includes(id);
+        });
         removed.forEach((ec) => {
           const targetG = ec.targetGraph;
-          if (targetG && targetG.connectedOutputStealths) {
-            targetG.connectedOutputStealths.delete(ec.originNode.data.hash);
+          const hash =
+            ec.originNodeData?.hash ||
+            ec.originNodeData?.output_stealth_address ||
+            ec.originNode?.data?.hash ||
+            ec.originNode?.data?.output_stealth_address;
+          if (targetG && targetG.connectedOutputStealths && hash) {
+            targetG.connectedOutputStealths.delete(hash);
             this.refreshGraphOutputs(targetG);
           }
         });
@@ -2724,19 +3209,30 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     );
     if (graphsToRemove.length === 0) return;
     graphsToRemove.forEach((g) => {
-      const allNodes = g.inputRoot.descendants();
-      const childRingMemberIds = allNodes
-        .filter((n: any) => n.data.type === 'ring_member')
-        .map((n: any) => n.data.id);
+      const allInputs = g.allInputs && g.allInputs.length > 0 ? g.allInputs : g.inputRoot.leaves().map((l: any) => l.data);
+      const childRingMemberIds: string[] = [];
+      allInputs.forEach((inode: any) => {
+        const rms = inode.children || inode.ring_members;
+        if (rms) {
+          rms.forEach((rm: any) => childRingMemberIds.push(rm.id));
+        }
+      });
       this.removeDownstreamGraphs_Legacy(childRingMemberIds);
-      const parentGraph = this.graphs.find((pg) =>
-        pg.inputRoot.descendants().find((l: any) => l.data.id === g.connector!.originNodeId),
-      );
+      const parentGraph = this.graphs.find((pg) => {
+        const inputs = pg.allInputs && pg.allInputs.length > 0 ? pg.allInputs : pg.inputRoot.leaves().map((l: any) => l.data);
+        return inputs.some((inode: any) => {
+          const rms = inode.children || inode.ring_members;
+          return rms?.some((rm: any) => rm.id === g.connector!.originNodeId);
+        });
+      });
       if (parentGraph && g.connector) parentGraph.expandedNodeIds.delete(g.connector.originNodeId);
     });
     const idsToRemove = new Set(graphsToRemove.map((g) => g.id));
     this.graphs = this.graphs.filter((g) => !idsToRemove.has(g.id));
     this.graphs.forEach((g) => this.refreshGraphOutputs(g));
+    if (this.mergingResults && this.mergingResults.length > 0) {
+      this.graphs.forEach((g) => this.refreshGraphInputs(g));
+    }
   }
 
   private getIdealOffsetY_Legacy(graph: GraphInstance): number {
@@ -2748,9 +3244,13 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       return graph.baseOffsetY ?? graph.offsetY ?? 0;
     }
 
-    const originNode = parentGraph.inputRoot
+    let originNode = parentGraph.inputRoot
       .descendants()
       .find((n: any) => n.data.id === graph.connector!.originNodeId);
+    if (!originNode) {
+      const context = this.findRingMemberContext(parentGraph, graph.connector!.originNodeId);
+      if (context) originNode = context.d3Node;
+    }
 
     let anchorY = parentGraph.offsetY;
     if (originNode && typeof originNode.x === 'number') {
@@ -2781,9 +3281,17 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         const absX = node.y + g.offsetX;
         let rY = 0,
           rX = 0;
-        if (node.data.type === 'output_bubble' || node.data.type === 'output_collapse') {
+        if (
+          node.data.type === 'output_bubble' ||
+          node.data.type === 'output_collapse' ||
+          node.data.type === 'input_bubble' ||
+          node.data.type === 'input_collapse'
+        ) {
           rY = 15;
           rX = 45;
+        } else if (node.data.type === 'tx' || node.data.type === 'coinbase_start') {
+          rY = 15;
+          rX = 50;
         } else {
           rY = 10;
           rX = 10;
@@ -2797,6 +3305,41 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       g.outputRoot.descendants().forEach(update);
       return { minX, maxX, minY, maxY };
     };
+
+    const isTracing = !!(this.mergingResults && this.mergingResults.length > 0);
+
+    if (isTracing) {
+      let currentRootBottom: number | null = null;
+      this.graphs.forEach((g) => {
+        if (!g.connector) {
+          const b = getLocalBounds(g);
+          if (currentRootBottom === null) {
+            g.offsetY = 0;
+            g.baseOffsetY = 0;
+            currentRootBottom = b.maxY;
+          } else {
+            g.offsetY = currentRootBottom + padding - b.minY;
+            g.baseOffsetY = g.offsetY;
+            currentRootBottom = g.offsetY + b.maxY;
+          }
+        }
+      });
+
+      for (let pass = 0; pass < this.graphs.length; pass++) {
+        let changed = false;
+        for (const g of this.graphs) {
+          if (g.connector) {
+            const ideal = this.getIdealOffsetY_Legacy(g);
+            if (Math.abs(g.offsetY - ideal) > 0.01) {
+              g.offsetY = ideal;
+              g.baseOffsetY = ideal;
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+    }
 
     const graphData = this.graphs.map((g) => {
       const b = getLocalBounds(g);
@@ -2839,13 +3382,27 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       columns.push(col);
     }
 
+    columns.sort((colA, colB) => {
+      const maxXA = Math.max(...colA.map((item) => item.maxX));
+      const maxXB = Math.max(...colB.map((item) => item.maxX));
+      return maxXB - maxXA;
+    });
+
     for (const col of columns) {
+      col.forEach((item) => {
+        item.idealOffsetY = this.getIdealOffsetY_Legacy(item.g);
+      });
+
       if (col.length <= 1) {
         col[0].g.offsetY = col[0].idealOffsetY;
         continue;
       }
 
-      col.sort((a, b) => a.g.offsetY - b.g.offsetY);
+      if (isTracing) {
+        col.sort((a, b) => a.idealOffsetY - b.idealOffsetY);
+      } else {
+        col.sort((a, b) => a.g.offsetY - b.g.offsetY);
+      }
 
       const m = col.length;
       const D: number[] = [];
@@ -2853,7 +3410,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         D.push(col[i].localMaxY - col[i + 1].localMinY + padding);
       }
 
-      const Y = col.map((item) => item.g.offsetY);
+      const Y = col.map((item) => (isTracing ? item.idealOffsetY : item.g.offsetY));
 
       for (let iter = 0; iter < 40; iter++) {
         for (let i = 0; i < m; i++) {
@@ -3053,6 +3610,9 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       });
       this.updateChart_Ring();
     }
+
+    this.graphs.forEach((g) => this.refreshGraphInputs(g));
+    this.updateChart_Ring();
   }
 
   private visualizeTrace_Legacy(result: MergingResult) {
@@ -3130,6 +3690,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                 if (!graph.extraConnectors) graph.extraConnectors = [];
                 graph.extraConnectors.push({
                   originNode: rmNode,
+                  originNodeData: rm,
                   targetNode: matchNode,
                   targetGraph: parentGraph,
                 });
@@ -3141,6 +3702,9 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       });
       this.updateChart_Legacy();
     }
+
+    this.graphs.forEach((g) => this.refreshGraphInputs(g));
+    this.updateChart_Legacy();
   }
 
   public exportGraphConfiguration(): void {
@@ -3172,6 +3736,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         rotationEnabled: g.rotationEnabled,
         expandedNodeIds: Array.from(g.expandedNodeIds),
         outputsExpanded: g.outputsExpanded,
+        inputsExpanded: g.inputsExpanded,
         connectedOutputStealths: g.connectedOutputStealths
           ? Array.from(g.connectedOutputStealths)
           : [],
@@ -3266,6 +3831,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         if (rootInfo.outputsExpanded !== undefined) {
           rootGraph.outputsExpanded = rootInfo.outputsExpanded;
         }
+        if (rootInfo.inputsExpanded !== undefined) {
+          rootGraph.inputsExpanded = rootInfo.inputsExpanded;
+        }
+        this.refreshGraphInputs(rootGraph);
         this.refreshGraphOutputs(rootGraph);
       }
     }
@@ -3309,6 +3878,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                 if (gInfo.outputsExpanded !== undefined) {
                   newGraph.outputsExpanded = gInfo.outputsExpanded;
                 }
+                if (gInfo.inputsExpanded !== undefined) {
+                  newGraph.inputsExpanded = gInfo.inputsExpanded;
+                }
+                this.refreshGraphInputs(newGraph);
                 this.refreshGraphOutputs(newGraph);
               }
             }

@@ -181,8 +181,8 @@
       transition: fill 0.2s, stroke 0.2s;
     }
     &:hover rect {
-      fill: var(--graphRingBg);
-      stroke: #2b78e4;
+      fill: var(--graphRingBg) !important;
+      stroke: #2b78e4 !important;
     }
     text {
       fill: var(--graphText);
@@ -203,8 +203,50 @@
       transition: fill 0.2s, stroke 0.2s;
     }
     &:hover rect {
-      fill: var(--graphRingBg);
-      stroke: #aaa;
+      fill: var(--graphRingBg) !important;
+      stroke: #aaa !important;
+    }
+    text {
+      fill: var(--graphText);
+      font-size: 9px;
+      font-family: 'Google Sans Code';
+      pointer-events: none;
+    }
+  }
+
+  .node-input-bubble {
+    cursor: pointer;
+    rect {
+      fill: var(--graphNodeFill);
+      stroke: #00bcd4;
+      stroke-width: 1.5px;
+      transition: fill 0.2s, stroke 0.2s;
+    }
+    &:hover rect {
+      fill: var(--graphRingBg) !important;
+      stroke: #33c9dc !important;
+    }
+    text {
+      fill: var(--graphText);
+      font-size: 10px;
+      font-weight: 500;
+      font-family: 'Google Sans Code';
+      pointer-events: none;
+    }
+  }
+
+  .node-input-collapse {
+    cursor: pointer;
+    rect {
+      fill: var(--graphNodeFill);
+      stroke: #888;
+      stroke-width: 1px;
+      stroke-dasharray: 3, 2;
+      transition: fill 0.2s, stroke 0.2s;
+    }
+    &:hover rect {
+      fill: var(--graphRingBg) !important;
+      stroke: #aaa !important;
     }
     text {
       fill: var(--graphText);
@@ -249,7 +291,8 @@
     animation: none !important;
   }
 
-  .link.output-bubble-link {
+  .link.output-bubble-link,
+  .link.input-bubble-link {
     stroke-dasharray: 4, 3 !important;
     opacity: 0.5 !important;
   }
