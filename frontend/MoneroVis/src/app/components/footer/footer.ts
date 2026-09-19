@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { ModalService } from '../../service/modal.service';
 
 @Component({
   selector: 'app-footer',
@@ -7,5 +8,9 @@ import { Component } from '@angular/core';
   styleUrl: './footer.scss',
 })
 export class Footer {
+  public modalService = inject(ModalService);
 
+  openDisclaimer() {
+    this.modalService.open('disclaimer');
+  }
 }

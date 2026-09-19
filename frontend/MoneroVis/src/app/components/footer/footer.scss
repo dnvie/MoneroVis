@@ -1,14 +1,9 @@
 .footerContainer {
-  height: 60px;
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   margin-top: 2px;
-}
-
-.desktopOnly {
-  display: block;
 }
 
 a {
@@ -17,15 +12,17 @@ a {
 
 .footerFrame {
   width: var(--frameWidth);
-  height: 50px;
+  min-height: 50px;
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   background-color: var(--searchBackground);
   border: var(--txGraphBorder);
   border-radius: 10px;
-  gap: 10px;
+  gap: 0;
+  padding: 10px 0;
 }
 
 .footerContent {
@@ -33,6 +30,15 @@ a {
   flex-direction: row;
   gap: 5px;
   justify-content: center;
+  align-items: center;
+
+  &--left {
+    padding-left: 15px;
+  }
+
+  &--right {
+    padding-right: 15px;
+  }
 }
 
 .footerText {
@@ -47,6 +53,10 @@ a {
     color: var(--footerText);
     cursor: pointer;
   }
+
+  .link-underline {
+    text-decoration: underline;
+  }
 }
 
 .footerImage {
@@ -58,13 +68,28 @@ a {
 }
 
 @media only screen and (max-width: 500px) {
-  .footerImage {
-    top: 0px;
+  .footerFrame {
+    justify-content: center;
+    padding: 12px 0;
+    gap: 10px;
   }
-}
 
-@media only screen and (max-width: 350px) {
-  .desktopOnly {
-    display: none;
+  .footerContent {
+    width: 100%;
+    justify-content: center;
+
+    &--left {
+      padding-left: 0;
+      order: 2;
+    }
+
+    &--right {
+      padding-right: 0;
+      order: 1;
+    }
+  }
+
+  .footerImage {
+    top: 0;
   }
 }

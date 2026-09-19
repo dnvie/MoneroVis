@@ -10,6 +10,8 @@
       <div class="heading">Edit Label</div>
       } @if (modalService.mode() === 'export-format') {
       <div class="heading">Export Graph</div>
+      } @if (modalService.mode() === 'disclaimer') {
+      <div class="heading">Notice & Methodological Limitations</div>
       }
 
       <div class="close" (click)="modalService.close()">
@@ -295,6 +297,42 @@
           <li><strong>Click Block:</strong> Navigate to its block page.</li>
         </ul>
       </div>
+    </div>
+    } @if (modalService.mode() === 'disclaimer') {
+    <div class="content disclaimer-content">
+      <span>
+        Visualizations and heuristic links displayed on MoneroVis are provided strictly for
+        educational and analytical research purposes. As demonstrated in forensic literature
+        (<i>Deuber et al., 2022</i>), cryptocurrency heuristic analysis relies on behavioral and
+        statistical assumptions that are subject to uncertainty and false positives.
+      </span>
+
+      <span>In Monero's privacy architecture:</span>
+
+      <ul class="disclaimer-list">
+        <li>
+          <strong>Ring Signatures & Decoys:</strong> Apparent linkages or overlap (such as output
+          co-occurrence across rings) are probabilistic and can occur by chance as artifacts of random decoy selection.
+        </li>
+        <li>
+          <strong>No Ground Truth:</strong> On-chain visual relationships do not constitute
+          definitive proof of transaction ownership, wallet association, or entity identity.
+        </li>
+      </ul>
+
+      <span>
+        Graphical outputs should not be interpreted as conclusive forensic evidence. For a detailed
+        breakdown of underlying analysis assumptions, see:
+        <i
+          >Deuber, D., Ronge, V., &amp; R&uuml;ckert, C. (2022). &ldquo;SoK: Assumptions Underlying
+          Cryptocurrency Deanonymizations.&rdquo; Proceedings on Privacy Enhancing Technologies,
+          2022(3).</i
+        >
+      </span>
+
+      <a href="https://moneroresearch.info/97" target="_blank" rel="noopener noreferrer">
+        https://moneroresearch.info/97
+      </a>
     </div>
     }
   </div>

@@ -82,6 +82,25 @@
     font-weight: 380;
   }
 
+  .disclaimer-content {
+    a {
+      color: var(--footerText);
+      word-break: break-all;
+    }
+  }
+
+  .disclaimer-list {
+    margin: 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    li {
+      line-height: 22px;
+    }
+  }
+
   .legend-content {
     font-size: 13px;
   }

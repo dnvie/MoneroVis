@@ -177,3 +177,16 @@ From `frontend/MoneroVis/src`:
 - run dev server: `ng serve`
 
 ---
+
+## Notice & Methodological Limitations
+
+Visualizations and heuristic links displayed on MoneroVis are provided strictly for educational and analytical research purposes. As demonstrated in forensic literature (*Deuber et al., 2022*), cryptocurrency heuristic analysis relies on behavioral and statistical assumptions that are subject to uncertainty and false positives.
+
+In Monero's privacy architecture:
+
+- **Ring Signatures & Decoys**: Apparent linkages or overlap (such as output co-occurrence across rings) are probabilistic and can occur by chance as artifacts of random decoy selection.
+- **No Ground Truth**: On-chain visual relationships do not constitute definitive proof of transaction ownership, wallet association, or entity identity.
+
+Graphical outputs should not be interpreted as conclusive forensic evidence. For a detailed breakdown of underlying analysis assumptions, see:
+*Deuber, D., Ronge, V., & Rückert, C. (2022). "SoK: Assumptions Underlying Cryptocurrency Deanonymizations." Proceedings on Privacy Enhancing Technologies, 2022(3).*
+https://moneroresearch.info/97
