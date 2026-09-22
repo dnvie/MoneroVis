@@ -37,6 +37,7 @@ const OUTER_EDGE_BUFFER = 5;
 const LEGACY_MIN_RADIUS = 2;
 const LEGACY_MAX_RADIUS = 12;
 const MAX_OUTPUTS_BEFORE_COLLAPSE = 5;
+const MAX_INPUTS_BEFORE_COLLAPSE = 2;
 
 type GraphMode = 'ring' | 'legacy';
 
@@ -184,6 +185,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
 
     if (changes['highlightedAddress'] && !changes['highlightedAddress'].isFirstChange()) {
       this.graphs.forEach((g) => this.refreshGraphOutputs(g));
+      this.graphs.forEach((g) => this.refreshGraphInputs(g));
       this.updateChart();
     }
   }
@@ -332,10 +334,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       }
 
       this.restoreExtraConnectors(graphsToRestore);
-
-      if (this.mergingResults && this.mergingResults.length > 0) {
-        this.graphs.forEach((g) => this.refreshGraphInputs(g));
-      }
+      this.graphs.forEach((g) => this.refreshGraphInputs(g));
 
       this.updateChart();
     } else if (this.initialTransaction) {
@@ -687,7 +686,47 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     const isTracing = !!(this.mergingResults && this.mergingResults.length > 0);
 
     if (!isTracing) {
-      visibleInputs = [...graph.allInputs];
+      if (totalInputs <= MAX_INPUTS_BEFORE_COLLAPSE) {
+        visibleInputs = [...graph.allInputs];
+      } else if (graph.inputsExpanded) {
+        visibleInputs = [
+          ...graph.allInputs,
+          {
+            id: `in-collapse-${graph.id}`,
+            type: 'input_collapse',
+            tx_hash: graph.id,
+          },
+        ];
+      } else {
+        const connected = this.getConnectedRingMembersForGraph(graph);
+        const explicitInputs: any[] = [];
+        const hiddenInputs: any[] = [];
+
+        graph.allInputs.forEach((input, index) => {
+          if (
+            index < MAX_INPUTS_BEFORE_COLLAPSE ||
+            this.isInputConnected(input, connected)
+          ) {
+            explicitInputs.push(input);
+          } else {
+            hiddenInputs.push(input);
+          }
+        });
+
+        if (hiddenInputs.length === 0) {
+          visibleInputs = [...explicitInputs];
+        } else {
+          visibleInputs = [...explicitInputs];
+          visibleInputs.push({
+            id: `in-bubble-${graph.id}`,
+            type: 'input_bubble',
+            count: hiddenInputs.length,
+            totalCount: totalInputs,
+            bundledInputs: hiddenInputs,
+            tx_hash: graph.id,
+          });
+        }
+      }
     } else {
       const connected = this.getConnectedRingMembersForGraph(graph);
       const explicitInputs = graph.allInputs.filter((input) =>
@@ -697,7 +736,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         (input) => !this.isInputConnected(input, connected),
       );
 
-      if (hiddenInputs.length <= 1) {
+      if (
+        hiddenInputs.length === 0 ||
+        (explicitInputs.length === 0 && hiddenInputs.length <= 1)
+      ) {
         visibleInputs = [...graph.allInputs];
       } else if (graph.inputsExpanded) {
         visibleInputs = [
@@ -1005,6 +1047,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     }
 
     this.isEmpty.set(false);
+    const isTracing = !!(this.mergingResults && this.mergingResults.length > 0);
+    if (!isTracing && !expandAll) {
+      this.refreshGraphInputs(graph);
+    }
     this.refreshGraphOutputs(graph);
 
     if (alignTarget) {
@@ -1467,7 +1513,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         } else if (type === 'output_bubble') {
           const count = d.data.count;
           const isPartial = d.data.count < d.data.totalCount;
-          const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+          const word = count === 1 ? 'Output' : 'Outputs';
+          const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
           const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
           const pillHeight = 22;
 
@@ -1500,7 +1547,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           el.on('mouseover', (e: MouseEvent) => {
             this.showTooltip(
               e,
-              `<strong>${count} OUTPUTS</strong><br>Click to expand all outputs`,
+              `<strong>${count} ${count === 1 ? 'OUTPUT' : 'OUTPUTS'}</strong><br>Click to expand all outputs`,
             );
           }).on('mouseout', () => this.hideTooltip());
         } else if (type === 'output_collapse') {
@@ -1543,7 +1590,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         } else if (type === 'input_bubble') {
           const count = d.data.count;
           const isPartial = d.data.count < d.data.totalCount;
-          const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+          const word = count === 1 ? 'Input' : 'Inputs';
+          const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
           const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
           const pillHeight = 22;
 
@@ -1576,7 +1624,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           el.on('mouseover', (e: MouseEvent) => {
             this.showTooltip(
               e,
-              `<strong>${count} INPUTS</strong><br>Click to expand all inputs`,
+              `<strong>${count} ${count === 1 ? 'INPUT' : 'INPUTS'}</strong><br>Click to expand all inputs`,
             );
           }).on('mouseout', () => this.hideTooltip());
         } else if (type === 'input_collapse') {
@@ -1767,7 +1815,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                 } else if (d.data.type === 'input_bubble') {
                   const count = d.data.count;
                   const isPartial = count < d.data.totalCount;
-                  const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+                  const word = count === 1 ? 'Input' : 'Inputs';
+                  const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
                   const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
                   x += textWidth / 2;
                 } else if (d.data.type === 'input_collapse') {
@@ -1775,7 +1824,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                 } else if (d.data.type === 'output_bubble') {
                   const count = d.data.count;
                   const isPartial = count < d.data.totalCount;
-                  const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+                  const word = count === 1 ? 'Output' : 'Outputs';
+                  const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
                   const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
                   x -= textWidth / 2;
                 } else if (d.data.type === 'output_collapse') {
@@ -1889,6 +1939,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           targetGraph: existingGraph,
         });
         graph.expandedNodeIds.add(d.id);
+        this.refreshGraphInputs(graph);
         this.updateChart_Ring();
       }
       return;
@@ -1905,6 +1956,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     }
 
     graph.expandedNodeIds.add(d.id);
+    this.refreshGraphInputs(graph);
     this.isGraphLoading.set(true);
 
     const alignTarget = {
@@ -1923,6 +1975,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           this.addTransactionToGraph_Ring(parentTx, alignTarget, false, false);
         } else {
           graph.expandedNodeIds.delete(d.id);
+          this.refreshGraphInputs(graph);
           this.updateChart_Ring();
         }
         this.isGraphLoading.set(false);
@@ -1930,6 +1983,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       error: (err) => {
         console.error(err);
         graph.expandedNodeIds.delete(d.id);
+        this.refreshGraphInputs(graph);
         this.updateChart_Ring();
         this.isGraphLoading.set(false);
       },
@@ -1991,9 +2045,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     const idsToRemove = new Set(graphsToRemove.map((g) => g.id));
     this.graphs = this.graphs.filter((g) => !idsToRemove.has(g.id));
     this.graphs.forEach((g) => this.refreshGraphOutputs(g));
-    if (this.mergingResults && this.mergingResults.length > 0) {
-      this.graphs.forEach((g) => this.refreshGraphInputs(g));
-    }
+    this.graphs.forEach((g) => this.refreshGraphInputs(g));
   }
 
   private drawBridgeLink_Ring(container: any, pathData: string, originId: string) {
@@ -2444,6 +2496,10 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     }
 
     this.isEmpty.set(false);
+    const isTracing = !!(this.mergingResults && this.mergingResults.length > 0);
+    if (!isTracing && !expandAll) {
+      this.refreshGraphInputs(graph);
+    }
     this.refreshGraphOutputs(graph);
 
     if (alignTarget) {
@@ -2727,7 +2783,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                 if (d.data.type === 'input_bubble') {
                   const count = d.data.count;
                   const isPartial = count < d.data.totalCount;
-                  const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+                  const word = count === 1 ? 'Input' : 'Inputs';
+                  const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
                   const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
                   x += textWidth / 2;
                 } else if (d.data.type === 'input_collapse') {
@@ -2735,7 +2792,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
                 } else if (d.data.type === 'output_bubble') {
                   const count = d.data.count;
                   const isPartial = count < d.data.totalCount;
-                  const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+                  const word = count === 1 ? 'Output' : 'Outputs';
+                  const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
                   const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
                   x -= textWidth / 2;
                 } else if (d.data.type === 'output_collapse') {
@@ -2781,11 +2839,11 @@ export class TransactionGraph implements OnDestroy, OnChanges {
               html += `<br>Stealth Address: ${d.data.stealth_address.substring(0, 8)}…${d.data.stealth_address.slice(-8)}`;
               html += `<br>Output Index: ${d.data.output_index}`;
             } else if (d.data.type === 'output_bubble') {
-              html += `<br>Count: ${d.data.count} outputs<br>Click to expand all outputs`;
+              html += `<br>Count: ${d.data.count} ${d.data.count === 1 ? 'Output' : 'Outputs'}<br>Click to expand all outputs`;
             } else if (d.data.type === 'output_collapse') {
               html += `<br>Click to collapse outputs into bubble`;
             } else if (d.data.type === 'input_bubble') {
-              html += `<br>Count: ${d.data.count} inputs<br>Click to expand all inputs`;
+              html += `<br>Count: ${d.data.count} ${d.data.count === 1 ? 'Input' : 'Inputs'}<br>Click to expand all inputs`;
             } else if (d.data.type === 'input_collapse') {
               html += `<br>Click to collapse inputs into bubble`;
             } else if (d.data.type === 'input') {
@@ -2941,7 +2999,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           } else if (d.data.type === 'output_bubble') {
             const count = d.data.count;
             const isPartial = d.data.count < d.data.totalCount;
-            const labelText = isPartial ? `+${count} outputs` : `${count} outputs`;
+            const word = count === 1 ? 'Output' : 'Outputs';
+            const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
             const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
             const pillHeight = 22;
 
@@ -2997,7 +3056,8 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           } else if (d.data.type === 'input_bubble') {
             const count = d.data.count;
             const isPartial = d.data.count < d.data.totalCount;
-            const labelText = isPartial ? `+${count} inputs` : `${count} inputs`;
+            const word = count === 1 ? 'Input' : 'Inputs';
+            const labelText = isPartial ? `+${count} ${word}` : `${count} ${word}`;
             const textWidth = Math.max(labelText.length * 6.5 + 20, 80);
             const pillHeight = 22;
 
@@ -3138,6 +3198,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
             targetGraph: existingGraph,
           });
           graph.expandedNodeIds.add(d.data.id);
+          this.refreshGraphInputs(graph);
           this.updateChart_Legacy();
         } else {
           alert('Could not find matching output in the existing transaction graph.');
@@ -3146,6 +3207,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
       }
 
       graph.expandedNodeIds.add(d.data.id);
+      this.refreshGraphInputs(graph);
       const absolutePos = {
         absoluteX: d.y + graph.offsetX,
         absoluteY: d.x + graph.offsetY,
@@ -3165,6 +3227,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
           if (parentTx) this.addTransactionToGraph_Legacy(parentTx, absolutePos);
           else {
             graph.expandedNodeIds.delete(d.data.id);
+            this.refreshGraphInputs(graph);
             this.updateChart_Legacy();
           }
           this.isGraphLoading.set(false);
@@ -3172,6 +3235,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
         error: (err) => {
           console.error('Failed to fetch parent transaction', err);
           graph.expandedNodeIds.delete(d.data.id);
+          this.refreshGraphInputs(graph);
           this.updateChart_Legacy();
           this.isGraphLoading.set(false);
         },
@@ -3230,9 +3294,7 @@ export class TransactionGraph implements OnDestroy, OnChanges {
     const idsToRemove = new Set(graphsToRemove.map((g) => g.id));
     this.graphs = this.graphs.filter((g) => !idsToRemove.has(g.id));
     this.graphs.forEach((g) => this.refreshGraphOutputs(g));
-    if (this.mergingResults && this.mergingResults.length > 0) {
-      this.graphs.forEach((g) => this.refreshGraphInputs(g));
-    }
+    this.graphs.forEach((g) => this.refreshGraphInputs(g));
   }
 
   private getIdealOffsetY_Legacy(graph: GraphInstance): number {
